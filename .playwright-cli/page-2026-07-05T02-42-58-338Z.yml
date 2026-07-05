@@ -1,0 +1,78 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: V3
+        - heading "运单全流程管理录单 · 品控 · 审批 · 执行" [level=1] [ref=e6]
+        - navigation [ref=e7]:
+          - link "工作台" [ref=e8] [cursor=pointer]:
+            - /url: /
+          - link "工单列表" [ref=e9] [cursor=pointer]:
+            - /url: /tickets
+          - link "扫描品控" [ref=e10] [cursor=pointer]:
+            - /url: /scan
+          - link "异常上报" [ref=e11] [cursor=pointer]:
+            - /url: /report
+          - link "同步监控" [ref=e12] [cursor=pointer]:
+            - /url: /monitor
+    - main [ref=e13]:
+      - generic [ref=e14]:
+        - heading "扫描品控" [level=2] [ref=e15]
+        - paragraph [ref=e16]: 仓库扫描录入，自动触发品控规则引擎检测
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - heading "扫描录入" [level=3] [ref=e19]:
+              - img [ref=e20]
+              - text: 扫描录入
+            - generic [ref=e25]:
+              - generic [ref=e26]:
+                - generic [ref=e27]: 运单号 *
+                - textbox "输入运单号" [ref=e28]
+              - generic [ref=e29]:
+                - generic [ref=e30]:
+                  - generic [ref=e31]: SKU 编码 *
+                  - textbox "SKU 编码" [ref=e32]
+                - generic [ref=e33]:
+                  - generic [ref=e34]: SKU 名称
+                  - textbox "SKU 名称" [ref=e35]
+              - generic [ref=e36]:
+                - generic [ref=e37]:
+                  - generic [ref=e38]: 期望数量
+                  - spinbutton [ref=e39]
+                - generic [ref=e40]:
+                  - generic [ref=e41]: 实际数量
+                  - spinbutton [ref=e42]
+              - generic [ref=e43]:
+                - generic [ref=e44]: 破损等级 (0-5)
+                - slider [ref=e45]: "0"
+                - generic [ref=e46]:
+                  - generic [ref=e47]: 0 (完好)
+                  - generic [ref=e48]: "当前: 0"
+                  - generic [ref=e49]: 5 (严重)
+              - generic [ref=e50]:
+                - generic [ref=e51]: 规格匹配
+                - button "匹配" [ref=e52]
+              - generic [ref=e53]:
+                - generic [ref=e54]: 操作人
+                - textbox [ref=e55]: operator_01
+              - button "执行扫描" [ref=e56]:
+                - img [ref=e57]
+                - text: 执行扫描
+          - generic [ref=e62]:
+            - heading "品控主管快速放行" [level=3] [ref=e63]:
+              - img [ref=e64]
+              - text: 品控主管快速放行
+            - paragraph [ref=e66]: 仅品控主管可操作，用于误判快速放行。操作需留痕记录。
+            - generic [ref=e67]:
+              - generic [ref=e68]:
+                - generic [ref=e69]: 扫描记录 ID
+                - textbox "输入扫描记录 ID" [ref=e70]
+              - generic [ref=e71]:
+                - generic [ref=e72]: 操作人（品控主管）
+                - textbox [ref=e73]: qc_supervisor
+              - generic [ref=e74]:
+                - generic [ref=e75]: 放行原因 *
+                - textbox "请详细说明误判复核原因" [ref=e76]
+              - button "确认快速放行" [ref=e77]
+  - button "Open Next.js Dev Tools" [ref=e83] [cursor=pointer]:
+    - img [ref=e84]
