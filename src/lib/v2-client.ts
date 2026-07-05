@@ -37,7 +37,7 @@ async function logSync(params: {
     // 写入同步日志（内联，避免循环依赖）
     const { getDb } = await import("./db");
     const db = getDb();
-    await db.query(
+    await db.unsafe(
       `INSERT INTO sync_logs (id, request_id, endpoint, method, params_summary, status_code, success, duration_ms, error_message)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [

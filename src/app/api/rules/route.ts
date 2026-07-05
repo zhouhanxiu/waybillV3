@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     else if (type === "timeout") table = "timeout_rules";
     else return NextResponse.json({ error: "未知规则类型" }, { status: 400 });
 
-    const rows = await query<any[]>(`SELECT * FROM ${table} ORDER BY created_at DESC`);
+    const rows = await query(`SELECT * FROM ${table} ORDER BY created_at DESC`);
 
     return NextResponse.json(rows.map((r) => ({
       ...r,

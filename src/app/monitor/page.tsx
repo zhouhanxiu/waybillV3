@@ -149,7 +149,7 @@ export default function MonitorPage() {
                         {log.success ? (
                           <CheckCircle2 className="w-4 h-4 text-success inline" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-danger inline" title={log.error_message} />
+                          <span title={log.error_message}><XCircle className="w-4 h-4 text-danger inline" /></span>
                         )}
                       </td>
                     </tr>

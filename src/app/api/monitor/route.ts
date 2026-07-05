@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
   let recentLogs: any[] = [];
 
   try {
-    const lastSync = await query<any[]>(
+    const lastSync = await query(
       "SELECT * FROM sync_logs WHERE success = true ORDER BY created_at DESC LIMIT 1"
     );
     lastSyncAt = lastSync[0]?.created_at || null;
 
-    const stats = await query<any[]>(
+    const stats = await query(
       `SELECT
         COUNT(*) as total,
         SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       success_rate: total > 0 ? (successCount / total * 100).toFixed(1) : "N/A",
     };
 
-    const logs = await query<any[]>(
+    const logs = await query(
       "SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 20"
     );
     recentLogs = logs.map((l) => ({

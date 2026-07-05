@@ -6,11 +6,11 @@ import { query } from "@/lib/db";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ticketId = params.id;
-    const rows = await query<any[]>(
+    const { id: ticketId } = await params;
+    const rows = await query(
       "SELECT * FROM approval_records WHERE ticket_id = $1 ORDER BY created_at ASC",
       [ticketId]
     );

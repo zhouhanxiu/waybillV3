@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     // 校验运单是否存在（通过 V2 接口 + 本地快照）
     let waybillId = "";
     try {
-      const snapshots = await query<any[]>(
+      const snapshots = await query(
         "SELECT * FROM waybill_snapshots WHERE external_code = $1 ORDER BY synced_at DESC LIMIT 1",
         [external_code]
       );
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       waybillId = snapshots[0].id;
 
       // 校验 SKU 是否归属于该运单
-      const items = await query<any[]>(
+      const items = await query(
         "SELECT * FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1 AND sku_code = $2",
         [waybillId, sku_code]
       );
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 检查是否已有未关闭的品控工单（幂等性）
-    const existingTickets = await query<any[]>(
+    const existingTickets = await query(
       `SELECT t.id FROM exception_tickets t
        JOIN scan_records s ON s.ticket_id = t.id
        WHERE s.external_code = $1 AND s.sku_code = $2
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 加载品控规则
-    const qcRules = await query<any[]>(
+    const qcRules = await query(
       "SELECT * FROM qc_rules WHERE enabled = true ORDER BY severity DESC"
     );
 
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
     );
 
     // 计算超时
-    const timeoutRules = await query<any[]>(
+    const timeoutRules = await query(
       "SELECT * FROM timeout_rules WHERE enabled = true AND scope = 'ticket_level2' LIMIT 1"
     );
     const dueAt = timeoutRules.length > 0
@@ -170,7 +170,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // 权限校验
-    const users = await query<any[]>(
+    const users = await query(
       "SELECT * FROM users WHERE name = $1 AND active = true",
       [operator]
     );
@@ -185,7 +185,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // 获取扫描记录
-    const scans = await query<any[]>("SELECT * FROM scan_records WHERE id = $1", [scan_id]);
+    const scans = await query("SELECT * FROM scan_records WHERE id = $1", [scan_id]);
     if (scans.length === 0) {
       return NextResponse.json({ error: "扫描记录不存在" }, { status: 404 });
     }

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
 
     if (id) {
-      const rows = await query<any[]>("SELECT * FROM exception_tickets WHERE id = $1", [id]);
+      const rows = await query("SELECT * FROM exception_tickets WHERE id = $1", [id]);
       if (rows.length === 0) {
         return NextResponse.json({ error: "工单不存在" }, { status: 404 });
       }
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 分页
-    const countResult = await query<any[]>(sql.replace("SELECT *", "SELECT COUNT(*) as total"), params);
+    const countResult = await query(sql.replace("SELECT *", "SELECT COUNT(*) as total"), params);
     const total = parseInt(countResult[0]?.total || "0");
 
     paramIdx++;
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     sql += ` OFFSET $${paramIdx}`;
     params.push((page - 1) * pageSize);
 
-    const rows = await query<any[]>(sql, params);
+    const rows = await query(sql, params);
 
     return NextResponse.json({
       items: rows.map(mapTicket),
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 检查同类型未关闭工单
-    const existing = await query<any[]>(
+    const existing = await query(
       `SELECT id FROM exception_tickets
        WHERE external_code = $1 AND exception_type = $2 AND status NOT IN ('done','closed')`,
       [external_code, exception_type]
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     let approvalLevel = 1;
 
     if (amount && amount > 0) {
-      const rules = await query<any[]>(
+      const rules = await query(
         "SELECT * FROM approval_level_rules WHERE enabled = true AND level = 2 AND min_amount IS NOT NULL ORDER BY min_amount ASC"
       );
       for (const rule of rules) {
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 计算超时时间
-    const timeoutRules = await query<any[]>(
+    const timeoutRules = await query(
       "SELECT * FROM timeout_rules WHERE enabled = true AND scope = $1 LIMIT 1",
       [initialStatus === "level2" ? "ticket_level2" : "ticket_pending"]
     );
@@ -178,7 +178,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // 获取工单
-    const tickets = await query<any[]>("SELECT * FROM exception_tickets WHERE id = $1", [id]);
+    const tickets = await query("SELECT * FROM exception_tickets WHERE id = $1", [id]);
     if (tickets.length === 0) {
       return NextResponse.json({ error: "工单不存在" }, { status: 404 });
     }
@@ -222,7 +222,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // 幂等性检查：如果已有相同审批记录，不重复创建
-    const existingApproval = await query<any[]>(
+    const existingApproval = await query(
       "SELECT id FROM approval_records WHERE ticket_id = $1 AND approver = $2 AND level = $3 AND action = $4",
       [id, approver, level || 1, action]
     );
@@ -249,7 +249,7 @@ export async function PUT(req: NextRequest) {
       } else {
         newStatus = "pending";
         // 重设超时
-        const timeoutRules = await query<any[]>(
+        const timeoutRules = await query(
           "SELECT * FROM timeout_rules WHERE enabled = true AND scope = 'ticket_pending' LIMIT 1"
         );
         newDueAt = timeoutRules.length > 0
@@ -272,7 +272,7 @@ export async function PUT(req: NextRequest) {
     } else {
       // 其他状态转换（如升级）
       if (newStatus === "level2") {
-        const timeoutRules = await query<any[]>(
+        const timeoutRules = await query(
           "SELECT * FROM timeout_rules WHERE enabled = true AND scope = 'ticket_level2' LIMIT 1"
         );
         newDueAt = timeoutRules.length > 0
@@ -293,7 +293,7 @@ export async function PUT(req: NextRequest) {
     });
   } catch (err: any) {
     if (process.env.NODE_ENV === "development" || isMockMode()) {
-      return NextResponse.json({ id, status: "done", message: "演示模式：审批已模拟通过（未配置真实数据库）" });
+        return NextResponse.json({ id: "demo", status: "done", message: "演示模式：审批已模拟通过（未配置真实数据库）" });
     }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

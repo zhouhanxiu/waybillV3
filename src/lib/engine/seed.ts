@@ -18,7 +18,7 @@ export async function seedDefaults() {
   ];
 
   for (const u of defaultUsers) {
-    const existing = await query<any[]>("SELECT id FROM users WHERE name = $1", [u.name]);
+    const existing = await query("SELECT id FROM users WHERE name = $1", [u.name]);
     if (existing.length === 0) {
       await query(
         "INSERT INTO users (id, name, roles) VALUES ($1, $2, $3)",
@@ -34,7 +34,7 @@ export async function seedDefaults() {
   ];
 
   for (const rule of approvalRules) {
-    const existing = await query<any[]>(
+    const existing = await query(
       "SELECT id FROM approval_level_rules WHERE level = $1 AND min_amount = $2",
       [rule.level, rule.min_amount]
     );
@@ -56,7 +56,7 @@ export async function seedDefaults() {
   ];
 
   for (const rule of timeoutRules) {
-    const existing = await query<any[]>(
+    const existing = await query(
       "SELECT id FROM timeout_rules WHERE scope = $1", [rule.scope]
     );
     if (existing.length === 0) {
@@ -122,7 +122,7 @@ export async function seedDefaults() {
   ];
 
   for (const rule of qcRules) {
-    const existing = await query<any[]>(
+    const existing = await query(
       "SELECT id FROM qc_rules WHERE name = $1", [rule.name]
     );
     if (existing.length === 0) {
