@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import SidebarLayout from "@/components/SidebarLayout";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Filter,
@@ -73,12 +74,35 @@ const SEVERITY_MAP: Record<string, { label: string; color: string }> = {
 };
 
 export default function TicketsPage() {
+  return (
+    <Suspense fallback={<TicketsLoading />}>
+      <TicketsPageInner />
+    </Suspense>
+  );
+}
+
+function TicketsLoading() {
+  return (
+    <SidebarLayout>
+      <div className="p-6 max-w-[1400px] mx-auto">
+        <div className="text-center py-20 text-ink-faint">加载中...</div>
+      </div>
+    </SidebarLayout>
+  );
+}
+
+function TicketsPageInner() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("status") || "";
+  const initialOverdue = searchParams.get("overdue") === "true";
+  const initialType = searchParams.get("type") || "";
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ status: "", type: "" });
+  const [filter, setFilter] = useState({ status: initialOverdue ? "overdue" : initialStatus, type: initialType, overdue: initialOverdue });
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ ticket: Ticket; approvals: ApprovalRecord[] } | null>(null);
   const [approvalForm, setApprovalForm] = useState({ approver: "", action: "approve", opinion: "" });
@@ -93,8 +117,9 @@ export default function TicketsPage() {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
-      if (filter.status) params.set("status", filter.status);
+      if (filter.status && filter.status !== "overdue") params.set("status", filter.status);
       if (filter.type) params.set("type", filter.type);
+      if (filter.status === "overdue" || filter.overdue) params.set("overdue", "true");
 
       const res = await fetch(`/api/tickets?${params}`, { signal });
       const data = await res.json();
@@ -191,13 +216,14 @@ export default function TicketsPage() {
       <div className="flex gap-3 mb-6 flex-wrap">
         <select
           value={filter.status}
-          onChange={(e) => { setFilter((f) => ({ ...f, status: e.target.value })); setPage(1); }}
+          onChange={(e) => { setFilter((f) => ({ ...f, status: e.target.value, overdue: e.target.value === "overdue" })); setPage(1); }}
           className="px-4 py-2 rounded-xl border border-line bg-card text-sm text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20"
         >
           <option value="">全部状态</option>
           {Object.entries(STATUS_MAP).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
+          <option value="overdue">已超时</option>
         </select>
 
         <select

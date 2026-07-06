@@ -136,5 +136,26 @@ export async function seedDefaults() {
     }
   }
 
+  // ──── 审批流配置 ─────────────────────────────────────────────────
+  const defaultFlows = [
+    {
+      name: "标准审批流",
+      steps: [
+        { role: "level1_approver", order: 1, label: "一级审批" },
+        { role: "level2_approver", order: 2, label: "二级审批" },
+      ],
+    },
+  ];
+
+  for (const flow of defaultFlows) {
+    const existing = await query("SELECT id FROM approval_flow_configs WHERE name = $1", [flow.name]);
+    if (existing.length === 0) {
+      await query(
+        `INSERT INTO approval_flow_configs (id, name, steps, enabled) VALUES ($1, $2, $3, true)`,
+        [uid("flow"), flow.name, JSON.stringify(flow.steps)]
+      );
+    }
+  }
+
   return { message: "默认数据初始化完成" };
 }

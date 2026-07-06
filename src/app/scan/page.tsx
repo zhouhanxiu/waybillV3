@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ScanLine, CheckCircle2, AlertTriangle, Shield, X } from "lucide-react";
 import SidebarLayout from "@/components/SidebarLayout";
 
@@ -28,19 +28,58 @@ export default function ScanPage() {
     external_code: "",
     sku_code: "",
     sku_name: "",
-    operator: "operator_01",
+    operator: "",
     expected_qty: "",
     actual_qty: "",
     damage_level: "0",
     spec_match: true,
   });
   const [loading, setLoading] = useState(false);
+  const [skuLoading, setSkuLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState("");
 
   // 快速放行表单
-  const [fastRelease, setFastRelease] = useState({ scan_id: "", operator: "qc_supervisor", reason: "" });
+  const [fastRelease, setFastRelease] = useState({ scan_id: "", operator: "", reason: "" });
   const [fastReleasing, setFastReleasing] = useState(false);
+
+  // 获取当前登录用户并设置默认值
+  useEffect(() => {
+    fetch("/api/auth")
+      .then((r) => r.json())
+      .then((d) => {
+        const user = d.user;
+        if (user) {
+          setForm((f) => ({ ...f, operator: user.name }));
+          setFastRelease((f) => ({ ...f, operator: user.name }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // 根据运单号和 SKU 编码自动带出 SKU 名称、期望数量
+  const fetchSkuInfo = async (externalCode: string, skuCode: string) => {
+    if (!externalCode || !skuCode) return;
+    setSkuLoading(true);
+    try {
+      const res = await fetch(`/api/waybills/items?external_code=${encodeURIComponent(externalCode)}&sku_code=${encodeURIComponent(skuCode)}`);
+      const data = await res.json();
+      if (res.ok && data.items && data.items.length > 0) {
+        const item = data.items[0];
+        setForm((f) => ({
+          ...f,
+          sku_name: item.sku_name || skuCode,
+          expected_qty: String(item.quantity || ""),
+        }));
+      } else {
+        setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+      }
+    } catch {
+      setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+    } finally {
+      setSkuLoading(false);
+    }
+  };
 
   const handleScan = async () => {
     if (!form.external_code || !form.sku_code) {
@@ -180,6 +219,7 @@ export default function ScanPage() {
                 type="text"
                 value={form.external_code}
                 onChange={(e) => setForm((f) => ({ ...f, external_code: e.target.value }))}
+                onBlur={() => form.sku_code && fetchSkuInfo(form.external_code, form.sku_code)}
                 placeholder="输入运单号"
                 className="w-full px-4 py-2.5 rounded-xl border border-line bg-bg text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20 transition-all"
               />
@@ -192,19 +232,25 @@ export default function ScanPage() {
                   type="text"
                   value={form.sku_code}
                   onChange={(e) => setForm((f) => ({ ...f, sku_code: e.target.value }))}
+                  onBlur={() => fetchSkuInfo(form.external_code, form.sku_code)}
                   placeholder="SKU 编码"
                   className="w-full px-4 py-2.5 rounded-xl border border-line bg-bg text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20 transition-all"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">SKU 名称</label>
-                <input
-                  type="text"
-                  value={form.sku_name}
-                  onChange={(e) => setForm((f) => ({ ...f, sku_name: e.target.value }))}
-                  placeholder="SKU 名称"
-                  className="w-full px-4 py-2.5 rounded-xl border border-line bg-bg text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20 transition-all"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.sku_name}
+                    readOnly
+                    placeholder={skuLoading ? "查询中..." : "自动带出"}
+                    className="w-full px-4 py-2.5 rounded-xl border border-line bg-bg text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20 transition-all"
+                  />
+                  {skuLoading && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-faint">查询中...</span>
+                  )}
+                </div>
               </div>
             </div>
 

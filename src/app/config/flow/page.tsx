@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import SidebarLayout from "@/components/SidebarLayout";
-import { Plus, Save, Trash2, ArrowRight, Settings } from "lucide-react";
+import { Plus, Save, Trash2, ArrowRight, Settings, Wand2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -12,12 +12,29 @@ const ROLE_LABELS: Record<string, string> = {
 export default function ApprovalFlowPage() {
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initing, setIniting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", steps: [{ role: "level1_approver", order: 1, label: "一级审批" }] });
   const [error, setError] = useState("");
 
+  const initData = async () => {
+    setIniting(true);
+    try {
+      const res = await fetch("/api/init-db");
+      const data = await res.json();
+      if (res.ok) await load();
+      else setError(data.error || "初始化失败");
+    } catch {
+      setError("初始化请求失败");
+    } finally {
+      setIniting(false);
+    }
+  };
+
   const load = async () => {
+
     try {
       const res = await fetch("/api/flows");
       const data = await res.json();
@@ -125,7 +142,18 @@ export default function ApprovalFlowPage() {
         {loading ? (
           <div className="text-center py-20 text-ink-faint text-sm">加载中...</div>
         ) : flows.length === 0 ? (
-          <div className="text-center py-20"><Settings className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" /><p className="text-ink-faint">暂无审批流配置</p></div>
+          <div className="text-center py-20">
+            <Settings className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" />
+            <p className="text-ink-faint mb-4">暂无审批流配置</p>
+            <button
+              onClick={initData}
+              disabled={initing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-jingtian text-white text-sm font-medium hover:bg-jingtian-dark mx-auto disabled:opacity-60"
+            >
+              <Wand2 className="w-4 h-4" />
+              {initing ? "初始化中..." : "初始化默认审批流"}
+            </button>
+          </div>
         ) : (
           <div className="space-y-4">
             {flows.map(flow => (

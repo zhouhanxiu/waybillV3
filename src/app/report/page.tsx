@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AlertTriangle, Send, CheckCircle2, X } from "lucide-react";
 import SidebarLayout from "@/components/SidebarLayout";
 
@@ -26,11 +26,24 @@ export default function ReportPage() {
     severity: "medium",
     description: "",
     amount: "",
-    reporter: "reporter_01",
+    reporter: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ id: string; status: string } | null>(null);
+
+  // 获取当前登录用户并设置上报人
+  useEffect(() => {
+    fetch("/api/auth")
+      .then((r) => r.json())
+      .then((d) => {
+        const user = d.user;
+        if (user) {
+          setForm((f) => ({ ...f, reporter: user.name }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async () => {
     if (!form.external_code || !form.exception_type || !form.reporter) {

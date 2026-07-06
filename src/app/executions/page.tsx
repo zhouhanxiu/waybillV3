@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import SidebarLayout from "@/components/SidebarLayout";
-import { DollarSign, Package, CheckCircle, XCircle, Clock } from "lucide-react";
+import { DollarSign, Package, CheckCircle, XCircle, Clock, Wand2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const DIR_LABELS: Record<string, string> = { to_customer: "赔付客户", from_supplier: "向供应商追偿" };
@@ -17,6 +17,8 @@ export default function ExecutionsPage() {
   const [compItems, setCompItems] = useState<any[]>([]);
   const [invItems, setInvItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [message, setMessage] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -35,6 +37,29 @@ export default function ExecutionsPage() {
 
   useEffect(() => { load(); }, [tab]);
 
+  const seedData = async () => {
+    setSeeding(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/seed/executions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 5 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`已生成 ${data.count} 条测试记录`);
+        await load();
+      } else {
+        setMessage(data.error || "生成失败");
+      }
+    } catch {
+      setMessage("网络错误");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   return (
     <SidebarLayout>
       <div className="p-6 max-w-[1400px] mx-auto">
@@ -43,7 +68,22 @@ export default function ExecutionsPage() {
             <h2 className="text-xl font-bold text-ink">执行记录</h2>
             <p className="text-sm text-ink-faint mt-0.5">审批通过后的执行联动记录</p>
           </div>
+          <button
+            onClick={seedData}
+            disabled={seeding}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-jingtian text-white text-sm font-medium hover:bg-jingtian-dark transition-colors disabled:opacity-50"
+          >
+            <Wand2 className="w-4 h-4" />
+            {seeding ? "生成中..." : "生成测试数据"}
+          </button>
         </div>
+
+        {message && (
+          <div className={`mb-4 p-3 rounded-xl text-sm ${message.includes("已生成") ? "bg-success/10 text-success" : "bg-danger-bg text-danger"}`}>
+            {message}
+          </div>
+        )}
+
 
         {/* Tab 切换 */}
         <div className="flex gap-1 bg-bg rounded-xl p-1 mb-6 w-fit">
