@@ -38,21 +38,21 @@ export default function DashboardPage() {
     async function load() {
       try {
         // 获取工单统计
-        const ticketsRes = await fetch("/api/tickets?pageSize=1");
-        const ticketsData = await ticketsRes.json();
-
-        // 获取 V2 状态
-        const monitorRes = await fetch("/api/monitor");
+        const [dashboardRes, monitorRes] = await Promise.all([
+          fetch("/api/dashboard"),
+          fetch("/api/monitor"),
+        ]);
+        const dashboardData = await dashboardRes.json();
         const monitorData = await monitorRes.json();
 
         setV2Status(monitorData.v2_healthy);
         setStats({
-          total_tickets: ticketsData.total || 0,
-          pending_tickets: ticketsData.total || 0, // 简化
-          overdue_tickets: 0,
-          today_scans: 0,
-          qc_hold_count: 0,
-          completed_today: 0,
+          total_tickets: dashboardData.total_tickets || 0,
+          pending_tickets: dashboardData.pending_tickets || 0,
+          overdue_tickets: dashboardData.overdue_tickets || 0,
+          today_scans: dashboardData.today_scans || 0,
+          qc_hold_count: dashboardData.qc_hold_count || 0,
+          completed_today: dashboardData.completed_today || 0,
         });
       } catch {
         // ignore

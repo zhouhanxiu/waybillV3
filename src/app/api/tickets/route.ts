@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const reporter = searchParams.get("reporter");
     const type = searchParams.get("type");
+    const overdue = searchParams.get("overdue");
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
 
@@ -43,6 +44,11 @@ export async function GET(req: NextRequest) {
       paramIdx++;
       sql += ` AND exception_type = $${paramIdx}`;
       params.push(type);
+    }
+
+    if (overdue === "true") {
+      paramIdx++;
+      sql += ` AND due_at IS NOT NULL AND due_at < NOW() AND status NOT IN ('done','closed')`;
     }
 
     // 分页
