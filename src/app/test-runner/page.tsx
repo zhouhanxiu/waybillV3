@@ -57,6 +57,21 @@ async function v3Self(path: string, opts: RequestInit = {}) {
   return fetchJson(path, opts);
 }
 
+async function cleanupOpenTickets() {
+  const list = await v3Self("/api/tickets");
+  const items = list.body?.items || [];
+  const openTickets = items.filter((t: any) => !["done", "closed"].includes(t.status));
+  const approvers = [ROLES.level1_approver, ROLES.level2_approver, ROLES.admin];
+  for (const ticket of openTickets) {
+    for (let i = 0; i < 3; i++) {
+      await v3Self("/api/tickets", {
+        method: "PUT",
+        body: JSON.stringify({ action: "reject", id: ticket.id, approver: approvers[i % approvers.length], opinion: "测试清理" }),
+      });
+    }
+  }
+}
+
 // ──── 默认角色 ──────────────────────────────────────────────────────
 
 const ROLES = {
@@ -207,6 +222,9 @@ export default function TestRunnerPage() {
 
     t3("V2 运单数据同步", state.testWaybills.length > 0, `获取 ${state.testWaybills.length} 条`);
 
+    // 清理历史未关闭工单，避免重复上报阻塞
+    await cleanupOpenTickets();
+
     if (state.testWaybills.length === 0) return;
 
     const wb = state.testWaybills[0];
@@ -243,7 +261,7 @@ export default function TestRunnerPage() {
     // 3.2 上报人不能审批自己
     setCurrentLine("考点3: 权限检查...");
     const selfApprove = await v3Self("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({ action: "approve", id: ticketId, approver: ROLES.reporter1, opinion: "自批测试" }),
     });
     t3("上报人不能审批自己 (403)", selfApprove.status === 403, `status=${selfApprove.status}`);
@@ -251,10 +269,10 @@ export default function TestRunnerPage() {
     // 3.3 一级审批
     setCurrentLine("考点3: 一级审批...");
     const approve1 = await v3Self("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({ action: "approve", id: ticketId, approver: ROLES.level1_approver, level: 1, opinion: "一级审批通过" }),
     });
-    t3("一级审批通过", approve1.ok, `status=${approve1.body?.ticket?.status || approve1.body?.status}`);
+    t3("一级审批通过", approve1.ok, `status=${approve1.body?.status}`);
 
     // 3.4 高金额跳过一级
     setCurrentLine("考点3: 高金额工单...");
@@ -288,11 +306,11 @@ export default function TestRunnerPage() {
       state.createdTicketIds.push(rejectTicket.body.id);
       const rid = rejectTicket.body.id;
       const rejectOp = await v3Self("/api/tickets", {
-        method: "POST",
+        method: "PUT",
         body: JSON.stringify({ action: "reject", id: rid, approver: ROLES.level1_approver, opinion: "信息不全，重提" }),
       });
       t3("拒绝→pending(允许重提)", rejectOp.ok,
-        `status=${rejectOp.body?.ticket?.status || rejectOp.body?.status}`);
+        `status=${rejectOp.body?.status}`);
 
       const info = await v3Self("/api/tickets");
       const found = info.body?.items?.find((t: any) => t.id === rid);
@@ -304,7 +322,7 @@ export default function TestRunnerPage() {
     setCurrentLine("考点3: 幂等性...");
     if (ticketId) {
       const dupApprove = await v3Self("/api/tickets", {
-        method: "POST",
+        method: "PUT",
         body: JSON.stringify({ action: "approve", id: ticketId, approver: ROLES.level1_approver, level: 1, opinion: "重复-应跳过" }),
       });
       const idempotent = dupApprove.status !== 200 || dupApprove.body?.already_approved;
@@ -325,8 +343,8 @@ export default function TestRunnerPage() {
       state.createdTicketIds.push(conTicket.body.id);
       const ctId = conTicket.body.id;
       const [res1, res2] = await Promise.all([
-        v3Self("/api/tickets", { method: "POST", body: JSON.stringify({ action: "approve", id: ctId, approver: ROLES.level1_approver, level: 1, opinion: "并发-A" }) }),
-        v3Self("/api/tickets", { method: "POST", body: JSON.stringify({ action: "approve", id: ctId, approver: "approver_level1_02", level: 1, opinion: "并发-B" }) }),
+        v3Self("/api/tickets", { method: "PUT", body: JSON.stringify({ action: "approve", id: ctId, approver: ROLES.level1_approver, level: 1, opinion: "并发-A" }) }),
+        v3Self("/api/tickets", { method: "PUT", body: JSON.stringify({ action: "approve", id: ctId, approver: "approver_level1_02", level: 1, opinion: "并发-B" }) }),
       ]);
       const conflict = res1.status === 409 || res2.status === 409 ||
         res1.body?.already_approved || res2.body?.already_approved ||
@@ -398,10 +416,10 @@ export default function TestRunnerPage() {
 
     const appTasks = [
       ...pendingTickets.slice(0, 10).map(id => () =>
-        v3Self("/api/tickets", { method: "POST", body: JSON.stringify({ action: "approve", id, approver: ROLES.level1_approver, level: 1, opinion: "批量通过" }) })
+        v3Self("/api/tickets", { method: "PUT", body: JSON.stringify({ action: "approve", id, approver: ROLES.level1_approver, level: 1, opinion: "批量通过" }) })
       ),
       ...level2Tickets.slice(0, 5).map(id => () =>
-        v3Self("/api/tickets", { method: "POST", body: JSON.stringify({ action: "approve", id, approver: ROLES.level2_approver, level: 2, opinion: "二级批量通过" }) })
+        v3Self("/api/tickets", { method: "PUT", body: JSON.stringify({ action: "approve", id, approver: ROLES.level2_approver, level: 2, opinion: "二级批量通过" }) })
       ),
     ];
 
