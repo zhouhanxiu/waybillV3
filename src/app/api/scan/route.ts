@@ -127,15 +127,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 不通过 — 创建品控暂扣 + 异常工单
+    // 不通过 — 创建异常工单 + 品控暂扣
     const ticketId = uid("ticket");
-
-    // 在事务中创建工单和扫描记录
-    await query(
-      `INSERT INTO scan_records (id, waybill_snapshot_id, external_code, sku_code, sku_name, operator, qc_result, batch_status, exception_subtype, exception_desc, rule_id_hit, ticket_id)
-       VALUES ($1,$2,$3,$4,$5,$6,'fail','qc_hold',$7,$8,$9,$10)`,
-      [scanId, waybillId, external_code, sku_code, sku_name || sku_code, operator, qcResult.exceptionSubtype, qcResult.reason, qcResult.ruleHit, ticketId]
-    );
 
     // 计算超时
     const timeoutRules = await query(
@@ -145,10 +138,18 @@ export async function POST(req: NextRequest) {
       ? new Date(Date.now() + timeoutRules[0].timeout_minutes * 60 * 1000).toISOString()
       : null;
 
+    // 先创建工单（scan_records.ticket_id 的外键指向这里）
     await query(
       `INSERT INTO exception_tickets (id, waybill_snapshot_id, external_code, exception_type, source, severity, description, reporter, status, retry_count, max_retry, due_at)
        VALUES ($1,$2,$3,$4,'scan_auto',$5,$6,$7,'level2',$8,$9,$10)`,
       [ticketId, waybillId, external_code, qcResult.exceptionSubtype, qcResult.severity || "medium", qcResult.reason || "", operator, 0, 3, dueAt]
+    );
+
+    // 再创建扫描记录（引用已存在的工单）
+    await query(
+      `INSERT INTO scan_records (id, waybill_snapshot_id, external_code, sku_code, sku_name, operator, qc_result, batch_status, exception_subtype, exception_desc, rule_id_hit, ticket_id)
+       VALUES ($1,$2,$3,$4,$5,$6,'fail','qc_hold',$7,$8,$9,$10)`,
+      [scanId, waybillId, external_code, sku_code, sku_name || sku_code, operator, qcResult.exceptionSubtype, qcResult.reason, qcResult.ruleHit, ticketId]
     );
 
     // 通知 V2
