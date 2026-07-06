@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Send, CheckCircle2, X } from "lucide-react";
+import SidebarLayout from "@/components/SidebarLayout";
 
 const EXCEPTION_TYPES = [
   { value: "lost", label: "丢件", desc: "运单在运输途中丢失" },
@@ -71,7 +72,8 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="max-w-[700px] mx-auto px-6 py-8">
+    <SidebarLayout>
+    <div className="p-6 max-w-[700px] mx-auto">
       <h2 className="text-2xl font-bold text-ink mb-2">异常上报</h2>
       <p className="text-sm text-ink-faint mb-8">手工上报物流异常，创建异常工单进入分级审批流程</p>
 
@@ -188,5 +190,6 @@ export default function ReportPage() {
         </div>
       </div>
     </div>
+    </SidebarLayout>
   );
 }

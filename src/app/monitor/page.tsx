@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Activity, Wifi, WifiOff, Clock, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import SidebarLayout from "@/components/SidebarLayout";
 
 type MonitorData = {
   v2_healthy: boolean;
@@ -47,7 +48,8 @@ export default function MonitorPage() {
   }, []);
 
   return (
-    <div className="max-w-[1000px] mx-auto px-6 py-8">
+    <SidebarLayout>
+    <div className="p-6 max-w-[1000px] mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-2xl font-bold text-ink">同步监控</h2>
@@ -164,5 +166,6 @@ export default function MonitorPage() {
         </>
       )}
     </div>
+    </SidebarLayout>
   );
 }

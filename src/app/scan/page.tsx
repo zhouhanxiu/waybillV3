@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ScanLine, CheckCircle2, AlertTriangle, Shield, X } from "lucide-react";
+import SidebarLayout from "@/components/SidebarLayout";
 
 type ScanResult = {
   id?: string;
@@ -113,7 +114,8 @@ export default function ScanPage() {
   };
 
   return (
-    <div className="max-w-[1000px] mx-auto px-6 py-8">
+    <SidebarLayout>
+    <div className="p-6 max-w-[1000px] mx-auto">
       <h2 className="text-2xl font-bold text-ink mb-2">扫描品控</h2>
       <p className="text-sm text-ink-faint mb-8">仓库扫描录入，自动触发品控规则引擎检测</p>
 
@@ -328,5 +330,6 @@ export default function ScanPage() {
         </div>
       </div>
     </div>
+    </SidebarLayout>
   );
 }

@@ -18,14 +18,13 @@ export async function GET(req: NextRequest) {
     else return NextResponse.json({ error: "未知规则类型" }, { status: 400 });
 
     const limit = Math.min(parseInt(searchParams.get("limit") || "100"), 1000);
-    const rows = await query(`SELECT id, name, exception_subtype, condition, severity, auto_create_ticket, approval_level, enabled, created_at FROM ${table} ORDER BY created_at DESC LIMIT $1`, [limit]);
+    const rows = await query(`SELECT * FROM ${table} ORDER BY created_at DESC LIMIT $1`, [limit]);
 
-
-    return NextResponse.json(rows.map((r) => ({
+    return NextResponse.json({ rules: rows.map((r: any) => ({
       ...r,
       condition: r.condition ? (typeof r.condition === "string" ? JSON.parse(r.condition) : r.condition) : undefined,
       exception_types: r.exception_types ? (typeof r.exception_types === "string" ? JSON.parse(r.exception_types) : r.exception_types) : undefined,
-    })));
+    }))});
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -88,6 +87,32 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ id, success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// PUT /api/rules — 更新规则
+export async function PUT(req: NextRequest) {
+  return POST(req);
+}
+
+// DELETE /api/rules?id=xxx&type=qc|approval|timeout
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    const type = searchParams.get("type") || "qc";
+    if (!id) return NextResponse.json({ error: "缺少ID" }, { status: 400 });
+
+    let table = "";
+    if (type === "qc") table = "qc_rules";
+    else if (type === "approval") table = "approval_level_rules";
+    else if (type === "timeout") table = "timeout_rules";
+    else return NextResponse.json({ error: "未知规则类型" }, { status: 400 });
+
+    await query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+    return NextResponse.json({ ok: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

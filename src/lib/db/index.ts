@@ -161,13 +161,25 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
-    // 用户表（简化版）
+    // 用户表（含密码认证）
     `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
+      name TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL DEFAULT '',
+      display_name TEXT,
       roles JSONB NOT NULL DEFAULT '[]',
       active BOOLEAN NOT NULL DEFAULT true,
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // 审批流配置表
+    `CREATE TABLE IF NOT EXISTS approval_flow_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      steps JSONB NOT NULL DEFAULT '[]',
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )`,
     // 索引
     `CREATE INDEX IF NOT EXISTS idx_tickets_status ON exception_tickets(status)`,
@@ -183,4 +195,14 @@ export async function initDb() {
   for (const sqlText of statements) {
     await query(sqlText);
   }
+
+  // 兼容迁移：为没有密码的旧用户设置默认密码
+  try {
+    const { hashPassword } = await import("../auth");
+    const rows = await query("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
+    for (const r of rows as any[]) {
+      const pwHash = await hashPassword("admin");
+      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
+    }
+  } catch { /* 忽略迁移错误 */ }
 }

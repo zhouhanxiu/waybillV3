@@ -106,7 +106,8 @@ export function evaluateQcResult(
   actualQty: number,
   damageLevel: number,
   specMatch: boolean,
-  rules: { condition: any[]; severity: string; exception_subtype: string; approval_level: number }[]
+  rules: { condition: any[]; severity: string; exception_subtype: string; approval_level: number }[],
+  opts?: { labelValid?: boolean; batchValid?: boolean }
 ): {
   passed: boolean;
   exceptionSubtype?: string;
@@ -115,21 +116,28 @@ export function evaluateQcResult(
   ruleHit?: string;
   reason?: string;
 } {
+  const labelValid = opts?.labelValid ?? true;
+  const batchValid = opts?.batchValid ?? true;
+
   for (const rule of rules) {
     let match = true;
     for (const cond of rule.condition) {
       const { field, operator, value } = cond;
+      const numVal = Number(value);
       if (field === "qty_diff_pct") {
         const diffPct = expectedQty > 0 ? Math.abs(actualQty - expectedQty) / expectedQty * 100 : 0;
-        match = match && compareOp(diffPct, operator, Number(value));
+        match = match && compareOp(diffPct, operator, numVal);
       } else if (field === "damage_level") {
-        match = match && compareOp(damageLevel, operator, Number(value));
+        match = match && compareOp(damageLevel, operator, numVal);
       } else if (field === "spec_deviation") {
-        match = match && compareOp(specMatch ? 0 : 1, operator, Number(value));
+        match = match && compareOp(specMatch ? 0 : 1, operator, numVal);
       } else if (field === "label_valid") {
-        match = match && compareOp(Number(value), operator, 0);
+        // 规则中 value=0 表示"标签无效"，value=1 表示"标签有效"
+        // 实际 labelValid=true → 实际值为 1，labelValid=false → 实际值为 0
+        match = match && compareOp(labelValid ? 1 : 0, operator, numVal);
       } else if (field === "batch_valid") {
-        match = match && compareOp(Number(value), operator, 0);
+        // 同上
+        match = match && compareOp(batchValid ? 1 : 0, operator, numVal);
       }
       if (!match) break;
     }

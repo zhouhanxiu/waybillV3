@@ -3,26 +3,28 @@
  */
 import { query, initDb } from "@/lib/db";
 import { uid } from "@/lib/utils";
+import { hashPassword } from "@/lib/auth";
 
 export async function seedDefaults() {
   await initDb();
 
   // ──── 默认用户 ────────────────────────────────────────────────────
   const defaultUsers = [
-    { name: "admin", roles: ["admin"] },
-    { name: "qc_supervisor", roles: ["qc_supervisor"] },
-    { name: "approver_level1_01", roles: ["level1_approver"] },
-    { name: "approver_level2_01", roles: ["level2_approver"] },
-    { name: "reporter_01", roles: ["reporter"] },
-    { name: "operator_01", roles: ["operator"] },
+    { name: "admin", password: "admin", roles: ["admin"] },
+    { name: "qc_supervisor", password: "qc123", roles: ["qc_supervisor"] },
+    { name: "approver_level1_01", password: "app123", roles: ["level1_approver"] },
+    { name: "approver_level2_01", password: "app123", roles: ["level2_approver"] },
+    { name: "reporter_01", password: "rep123", roles: ["reporter"] },
+    { name: "operator_01", password: "op123", roles: ["operator"] },
   ];
 
   for (const u of defaultUsers) {
     const existing = await query("SELECT id FROM users WHERE name = $1", [u.name]);
     if (existing.length === 0) {
+      const pwHash = await hashPassword(u.password);
       await query(
-        "INSERT INTO users (id, name, roles) VALUES ($1, $2, $3)",
-        [uid("user"), u.name, JSON.stringify(u.roles)]
+        "INSERT INTO users (id, name, password_hash, display_name, roles) VALUES ($1, $2, $3, $4, $5)",
+        [uid("user"), u.name, pwHash, u.name, JSON.stringify(u.roles)]
       );
     }
   }

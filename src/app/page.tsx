@@ -12,6 +12,7 @@ import {
   Activity,
 } from "lucide-react";
 import Link from "next/link";
+import SidebarLayout from "@/components/SidebarLayout";
 
 type DashboardStats = {
   total_tickets: number;
@@ -115,7 +116,8 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-8">
+    <SidebarLayout>
+    <div className="p-6 max-w-[1400px] mx-auto">
       {/* 状态栏 */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -199,5 +201,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+    </SidebarLayout>
   );
 }

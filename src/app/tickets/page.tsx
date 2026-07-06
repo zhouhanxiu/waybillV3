@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import SidebarLayout from "@/components/SidebarLayout";
 import {
   Search,
   Filter,
@@ -170,7 +171,8 @@ export default function TicketsPage() {
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-8">
+    <SidebarLayout>
+    <div className="p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-ink">工单列表</h2>
@@ -470,5 +472,6 @@ export default function TicketsPage() {
         </div>
       )}
     </div>
+    </SidebarLayout>
   );
 }
