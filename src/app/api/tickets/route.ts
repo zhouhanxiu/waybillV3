@@ -204,6 +204,35 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "不能审批自己提交的工单" }, { status: 403 });
     }
 
+    // 权限校验：审批人角色匹配当前审批层级
+    if (action === "approve" || action === "reject") {
+      const userRows = await query(
+        "SELECT * FROM users WHERE name = $1 AND active = true",
+        [approver]
+      );
+      if (userRows.length === 0) {
+        return NextResponse.json({ error: "审批人不存在或已禁用" }, { status: 403 });
+      }
+      const roles: string[] = typeof userRows[0].roles === "string"
+        ? JSON.parse(userRows[0].roles)
+        : (userRows[0].roles || []);
+
+      const hasApproverRole = roles.includes("level1_approver") || roles.includes("level2_approver") || roles.includes("admin");
+      if (!hasApproverRole) {
+        return NextResponse.json({ error: "无审批权限，需要审批人角色" }, { status: 403 });
+      }
+
+      // L2 工单只能由 L2 审批人或 admin 审批
+      if (ticket.status === "level2") {
+        if (!roles.includes("level2_approver") && !roles.includes("admin")) {
+          return NextResponse.json(
+            { error: `当前工单为二级审批，需要二级审批人或管理员权限` },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // 并发冲突检测：乐观锁（基于状态）
     if (action === "approve" || action === "reject") {
       if (!["pending", "level1", "level2"].includes(ticket.status)) {
