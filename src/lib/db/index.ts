@@ -196,6 +196,14 @@ export async function initDb() {
     await query(sqlText);
   }
 
+  // 兼容迁移：旧表可能缺少 password_hash 列
+  try {
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`);
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`);
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]'`);
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`);
+  } catch { /* 忽略迁移错误 */ }
+
   // 兼容迁移：为没有密码的旧用户设置默认密码
   try {
     const { hashPassword } = await import("../auth");
