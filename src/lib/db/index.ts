@@ -196,13 +196,39 @@ export async function initDb() {
     await query(sqlText);
   }
 
-  // 兼容迁移：旧表可能缺少 password_hash 列
-  try {
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`);
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`);
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]'`);
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`);
-  } catch { /* 忽略迁移错误 */ }
+  // ──── 兼容迁移：为旧表补充缺失列 ──────────────────────────────────
+  const migrations: Record<string, string[]> = {
+    users: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    ],
+    approval_flow_configs: [
+      `ALTER TABLE approval_flow_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    ],
+    qc_rules: [
+      `ALTER TABLE qc_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    ],
+    approval_level_rules: [
+      `ALTER TABLE approval_level_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    ],
+    timeout_rules: [
+      `ALTER TABLE timeout_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    ],
+    exception_tickets: [
+      `ALTER TABLE exception_tickets ADD COLUMN IF NOT EXISTS due_at TIMESTAMP`,
+    ],
+  };
+
+  for (const [table, statements] of Object.entries(migrations)) {
+    for (const sqlText of statements) {
+      try {
+        await query(sqlText);
+      } catch { /* 忽略单个迁移错误 */ }
+    }
+  }
 
   // 兼容迁移：为没有密码的旧用户设置默认密码
   try {
