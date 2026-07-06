@@ -36,12 +36,18 @@ async function proxyToV2(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25_000);
 
+    // 转发客户端发送的请求头，不自动添加 auth
+    const forwardHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const clientAuth = request.headers.get("authorization");
+    if (clientAuth) forwardHeaders["Authorization"] = clientAuth;
+    const clientReqId = request.headers.get("x-request-id");
+    if (clientReqId) forwardHeaders["X-Request-ID"] = clientReqId;
+
     const res = await fetch(v2Url, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${V2_API_KEY}`,
-      },
+      headers: forwardHeaders,
       body: body || undefined,
       signal: controller.signal,
     });
