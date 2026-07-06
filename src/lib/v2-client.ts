@@ -166,6 +166,27 @@ export async function verifySkuBelongsToWaybill(
   skuCode: string
 ): Promise<{ valid: boolean; waybill_id?: string; reason?: string }> {
   try {
+    // 优先读本地快照，避免每次请求都打 V2
+    const { getDb } = await import("./db");
+    const db = getDb();
+    const snapRows = await db.unsafe(
+      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
+      [externalCode]
+    );
+    if (snapRows.length > 0) {
+      const snapshotId = (snapRows[0] as any).id;
+      const itemRows = await db.unsafe(
+        "SELECT id FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1 AND sku_code = $2 LIMIT 1",
+        [snapshotId, skuCode]
+      );
+      return {
+        valid: itemRows.length > 0,
+        waybill_id: snapshotId,
+        reason: itemRows.length === 0 ? "SKU 不属于该运单" : undefined,
+      };
+    }
+
+    // 本地无快照，回源 V2
     const data = await v2Request<{ valid: boolean; waybill_id?: string; reason?: string }>(
       `/api/waybills/verify-sku`,
       {
@@ -256,20 +277,54 @@ export async function validateWaybillInV2(externalCode: string): Promise<{
   reason?: string;
 }> {
   try {
-    // 1. 校验 V2 是否存在该运单
+    const { getDb } = await import("./db");
+    const db = getDb();
+
+    // 1. 优先读本地快照：避免每次请求都打 V2，减少 V2 连接池压力
+    const snapRows = await db.unsafe(
+      `SELECT id, store_name, receiver_name, receiver_phone, receiver_address, synced_at
+       FROM waybill_snapshots WHERE external_code = $1 LIMIT 1`,
+      [externalCode]
+    );
+
+    if (snapRows.length > 0) {
+      const snapshot = snapRows[0] as any;
+      const itemRows = await db.unsafe(
+        `SELECT id, sku_code, sku_name, quantity, spec
+         FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1`,
+        [snapshot.id]
+      );
+
+      if (itemRows.length > 0) {
+        return {
+          valid: true,
+          snapshotId: snapshot.id,
+          waybill: {
+            id: snapshot.id,
+            external_code: externalCode,
+            store_name: snapshot.store_name || "",
+            receiver_name: snapshot.receiver_name || "",
+            receiver_phone: snapshot.receiver_phone || "",
+            receiver_address: snapshot.receiver_address || "",
+            items: itemRows.map((r: any) => ({
+              id: r.id,
+              sku_code: r.sku_code,
+              sku_name: r.sku_name,
+              quantity: Number(r.quantity || 0),
+              spec: r.spec,
+            })),
+          },
+        };
+      }
+    }
+
+    // 2. 本地无快照或不完整，回源 V2
     const wb = await getWaybill(externalCode);
     if (!wb) {
       return { valid: false, snapshotId: "", waybill: null, reason: `运单号 ${externalCode} 在 V2 中不存在` };
     }
 
-    // 2. 确保本地快照存在
-    const { getDb } = await import("./db");
-    const db = getDb();
-    const snapRows = await db.unsafe(
-      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-      [externalCode]
-    );
-
+    // 3. 确保本地快照存在
     let snapshotId: string;
     if (snapRows.length > 0) {
       snapshotId = (snapRows[0] as any).id;
@@ -282,7 +337,7 @@ export async function validateWaybillInV2(externalCode: string): Promise<{
       );
     }
 
-    // 3. 同步商品明细快照（幂等：已存在则跳过）
+    // 4. 同步商品明细快照（幂等：已存在则跳过）
     const items = wb.items || [];
     for (const item of items) {
       const existing = await db.unsafe(
