@@ -282,6 +282,22 @@ export async function validateWaybillInV2(externalCode: string): Promise<{
       );
     }
 
+    // 3. 同步商品明细快照（幂等：已存在则跳过）
+    const items = wb.items || [];
+    for (const item of items) {
+      const existing = await db.unsafe(
+        "SELECT id FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1 AND sku_code = $2 LIMIT 1",
+        [snapshotId, item.sku_code]
+      );
+      if (existing.length === 0) {
+        await db.unsafe(
+          `INSERT INTO waybill_item_snapshots (id, waybill_snapshot_id, sku_code, sku_name, quantity, spec)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [uid("item"), snapshotId, item.sku_code, item.sku_name, item.quantity, item.spec || ""]
+        );
+      }
+    }
+
     return { valid: true, snapshotId, waybill: wb };
   } catch (err: any) {
     return { valid: false, snapshotId: "", waybill: null, reason: `V2 连接失败: ${err.message}` };
