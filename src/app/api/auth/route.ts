@@ -13,8 +13,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "用户名和密码不能为空" }, { status: 400 });
     }
 
-    // 先查出所有活跃用户看看有没有匹配（避免 $1 参数绑定问题）
-    const allActive = await query("SELECT * FROM users WHERE active = true");
+    // 用户表为空时自动初始化默认用户，确保首次部署后可登录
+    let allActive = await query("SELECT * FROM users WHERE active = true");
+    if (allActive.length === 0) {
+      const { seedDefaults } = await import("@/lib/engine/seed");
+      await seedDefaults();
+      allActive = await query("SELECT * FROM users WHERE active = true");
+    }
+
     const user = (allActive as any[]).find(
       (u: any) => u.name === username
     );
