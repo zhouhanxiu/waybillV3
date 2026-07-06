@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ScanLine, CheckCircle2, AlertTriangle, Shield, X } from "lucide-react";
 import SidebarLayout from "@/components/SidebarLayout";
 
@@ -38,10 +38,15 @@ export default function ScanPage() {
   const [skuLoading, setSkuLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState("");
+  const [waybillItems, setWaybillItems] = useState<any[] | null>(null);
 
   // 快速放行表单
   const [fastRelease, setFastRelease] = useState({ scan_id: "", operator: "", reason: "" });
   const [fastReleasing, setFastReleasing] = useState(false);
+
+  const skuCacheRef = useRef<Record<string, any>>({});
+  const skuAbortRef = useRef<AbortController | null>(null);
+  const prefetchAbortRef = useRef<AbortController | null>(null);
 
   // 获取当前登录用户并设置默认值
   useEffect(() => {
@@ -58,14 +63,31 @@ export default function ScanPage() {
   }, []);
 
   // 根据运单号和 SKU 编码自动带出 SKU 名称、期望数量
-  const fetchSkuInfo = async (externalCode: string, skuCode: string) => {
+  const fetchSkuInfo = useCallback(async (externalCode: string, skuCode: string) => {
     if (!externalCode || !skuCode) return;
+    const cacheKey = `${externalCode}:${skuCode}`;
+    if (skuCacheRef.current[cacheKey]) {
+      const item = skuCacheRef.current[cacheKey];
+      setForm((f) => ({
+        ...f,
+        sku_name: item.sku_name || skuCode,
+        expected_qty: String(item.quantity || ""),
+      }));
+      return;
+    }
+
+    skuAbortRef.current?.abort();
+    skuAbortRef.current = new AbortController();
     setSkuLoading(true);
     try {
-      const res = await fetch(`/api/waybills/items?external_code=${encodeURIComponent(externalCode)}&sku_code=${encodeURIComponent(skuCode)}`);
+      const res = await fetch(
+        `/api/waybills/items?external_code=${encodeURIComponent(externalCode)}&sku_code=${encodeURIComponent(skuCode)}`,
+        { signal: skuAbortRef.current.signal }
+      );
       const data = await res.json();
       if (res.ok && data.items && data.items.length > 0) {
         const item = data.items[0];
+        skuCacheRef.current[cacheKey] = item;
         setForm((f) => ({
           ...f,
           sku_name: item.sku_name || skuCode,
@@ -74,12 +96,84 @@ export default function ScanPage() {
       } else {
         setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
       }
-    } catch {
-      setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+      }
     } finally {
       setSkuLoading(false);
     }
-  };
+  }, []);
+
+  // 预取整个运单的 SKU 列表，后续 SKU 输入只在本地匹配，无需再次请求
+  const prefetchWaybillItems = useCallback(async (externalCode: string) => {
+    prefetchAbortRef.current?.abort();
+    prefetchAbortRef.current = new AbortController();
+    try {
+      const res = await fetch(
+        `/api/waybills/items?external_code=${encodeURIComponent(externalCode)}`,
+        { signal: prefetchAbortRef.current.signal }
+      );
+      const data = await res.json();
+      if (res.ok && data.items) {
+        setWaybillItems(data.items);
+        // 如果 SKU 已经填好，直接匹配
+        setForm((f) => {
+          if (!f.sku_code) return f;
+          const item = data.items.find((i: any) => i.sku_code === f.sku_code);
+          if (item) {
+            return {
+              ...f,
+              sku_name: item.sku_name || f.sku_code,
+              expected_qty: String(item.quantity || ""),
+            };
+          }
+          return f;
+        });
+      } else {
+        setWaybillItems(null);
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        setWaybillItems(null);
+      }
+    }
+  }, []);
+
+  // 运单号变化后预取整个明细
+  useEffect(() => {
+    if (!form.external_code) {
+      setWaybillItems(null);
+      setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+      return;
+    }
+    const timer = setTimeout(() => {
+      prefetchWaybillItems(form.external_code);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [form.external_code, prefetchWaybillItems]);
+
+  // SKU 编码变化后优先本地匹配，否则回源接口
+  useEffect(() => {
+    if (!form.external_code || !form.sku_code) return;
+    if (waybillItems) {
+      const item = waybillItems.find((i: any) => i.sku_code === form.sku_code);
+      if (item) {
+        setForm((f) => ({
+          ...f,
+          sku_name: item.sku_name || form.sku_code,
+          expected_qty: String(item.quantity || ""),
+        }));
+      } else {
+        setForm((f) => ({ ...f, sku_name: "", expected_qty: "" }));
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchSkuInfo(form.external_code, form.sku_code);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [form.sku_code, form.external_code, waybillItems, fetchSkuInfo]);
 
   const handleScan = async () => {
     if (!form.external_code || !form.sku_code) {

@@ -26,13 +26,14 @@ export async function GET(req: NextRequest) {
 
     const snapshotId = vResult.snapshotId;
 
-    let sql = "SELECT * FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1";
+    let sql = "SELECT id, sku_code, sku_name, quantity, spec FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1";
     const params: any[] = [snapshotId];
 
     if (skuCode) {
-      sql += " AND sku_code = $2";
+      sql += " AND sku_code = $2 LIMIT 1";
       params.push(skuCode);
     }
+
 
     const rows = await query(sql, params);
 
