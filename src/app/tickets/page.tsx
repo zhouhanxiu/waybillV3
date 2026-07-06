@@ -177,7 +177,7 @@ export default function TicketsPage() {
           <p className="text-sm text-ink-faint mt-1">共 {total} 条工单</p>
         </div>
         <button
-          onClick={loadTickets}
+          onClick={() => loadTickets()}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-line text-sm text-ink-soft hover:bg-bg transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
