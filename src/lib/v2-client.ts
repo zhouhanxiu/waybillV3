@@ -3,12 +3,10 @@
  */
 import { uid } from "./utils";
 
-let V2_BASE_URL = (process.env.V2_API_BASE_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app").trim();
+// 强制使用正确的 V2 域名，避免环境变量被配错导致连接失败
+let V2_BASE_URL = "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
 
-// 防御：旧默认域名/无协议/带尾斜杠 自动修正
-if (V2_BASE_URL.includes("20260704155001.vercel.app") && !V2_BASE_URL.includes("-v3-")) {
-  V2_BASE_URL = "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
-}
+// 防御：无协议/带尾斜杠 自动修正
 if (!V2_BASE_URL.startsWith("http://") && !V2_BASE_URL.startsWith("https://")) {
   V2_BASE_URL = `https://${V2_BASE_URL}`;
 }
