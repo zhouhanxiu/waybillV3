@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       await seedDefaults();
       rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
     } catch (e: any) {
-      console.error("seedDefaults failed:", e.message);
+      return NextResponse.json({ error: `初始化默认用户失败: ${e.message}` }, { status: 500 });
     }
   }
 

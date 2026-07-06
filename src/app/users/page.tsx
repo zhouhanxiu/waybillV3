@@ -149,8 +149,15 @@ export default function UsersPage() {
         ) : users.length === 0 ? (
           <div className="text-center py-20 bg-card rounded-2xl border border-line">
             <p className="text-ink-faint mb-1">暂无用户数据</p>
-            {error && <p className="text-danger text-xs mb-3">{error}</p>}
-            <p className="text-xs text-ink-faint/70 mb-4">点击下方按钮初始化默认用户，或检查数据库连接</p>
+            {error ? (
+              <div className="max-w-md mx-auto mb-3 p-3 rounded-lg bg-danger-bg text-danger text-xs text-left">
+                <p className="font-medium mb-1">自动初始化失败：</p>
+                <p className="break-all">{error}</p>
+                <p className="mt-2 text-ink-soft">常见原因：Vercel 环境变量未设置 DATABASE_URL，或 Supabase 数据库连接失败。</p>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-faint/70 mb-3">点击下方按钮初始化默认用户</p>
+            )}
             <button
               onClick={initData}
               disabled={initing}
