@@ -21,17 +21,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 校验运单是否存在（通过 V2 接口 + 本地快照）
+    // 校验运单是否存在 — 通过 V2 HTTP API，自动同步到本地快照
     let waybillId = "";
     try {
+      // 先查本地快照
       const snapshots = await query(
         "SELECT * FROM waybill_snapshots WHERE external_code = $1 ORDER BY synced_at DESC LIMIT 1",
         [external_code]
       );
-      if (snapshots.length === 0) {
-        return NextResponse.json({ error: "运单不存在，请先同步数据" }, { status: 404 });
+
+      if (snapshots.length > 0) {
+        waybillId = snapshots[0].id;
+      } else {
+        // 本地没有，从 V2 拉取并写入快照
+        const { syncWaybillsFromV2 } = await import("@/lib/v2-client");
+        const v2Waybills = await syncWaybillsFromV2([external_code]);
+        if (v2Waybills.length === 0) {
+          return NextResponse.json({ error: "运单不存在" }, { status: 404 });
+        }
+
+        const wb = v2Waybills[0];
+        waybillId = uid("snap");
+        await query(
+          `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
+           VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+          [waybillId, wb.external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
+        );
+
+        if (wb.items && wb.items.length > 0) {
+          for (const item of wb.items) {
+            await query(
+              `INSERT INTO waybill_item_snapshots (id, waybill_snapshot_id, sku_code, sku_name, quantity, spec)
+               VALUES ($1,$2,$3,$4,$5,$6)`,
+              [uid("wbitem"), waybillId, item.sku_code, item.sku_name, item.quantity, item.spec || ""]
+            );
+          }
+        }
       }
-      waybillId = snapshots[0].id;
 
       // 校验 SKU 是否归属于该运单
       const items = await query(
@@ -43,7 +69,6 @@ export async function POST(req: NextRequest) {
       }
     } catch (err: any) {
       if (process.env.NODE_ENV === "development" || isMockMode()) {
-        // Demo 模式：无真实数据库时放行，展示流程效果
         return NextResponse.json({
           id: uid("scan"),
           result: "pass",
