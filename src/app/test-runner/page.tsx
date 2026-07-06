@@ -231,7 +231,7 @@ export default function TestRunnerPage() {
     let ticketId: string | null = null;
     if (ticketRes.ok && ticketRes.body?.id) {
       ticketId = ticketRes.body.id;
-      state.createdTicketIds.push(ticketId);
+      state.createdTicketIds.push(ticketId!);
       t3("创建工单 (pending)", ticketRes.body.status === "pending" || ticketRes.body.status === "level2",
         `id=${ticketId} status=${ticketRes.body.status}`);
     } else {
