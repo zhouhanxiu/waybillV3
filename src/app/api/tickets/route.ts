@@ -95,7 +95,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 确保本地快照存在（前端可能传假 ID，始终按 external_code 查或建）
+    // 手动异常上报：先校验 V2 中是否存在该运单
+    const { getWaybill } = await import("@/lib/v2-client");
+    const wb = await getWaybill(external_code);
+    if (!wb) {
+      return NextResponse.json({ error: `运单号 ${external_code} 在 V2 中不存在` }, { status: 400 });
+    }
+
+    // 确保本地快照存在（使用 V2 真实数据填充）
     let snapshotId = "";
     const snapRows = await query(
       "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
@@ -106,8 +113,9 @@ export async function POST(req: NextRequest) {
     } else {
       snapshotId = uid("snap");
       await query(
-        `INSERT INTO waybill_snapshots (id, external_code, synced_at) VALUES ($1,$2,NOW())`,
-        [snapshotId, external_code]
+        `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+        [snapshotId, external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
       );
     }
 
