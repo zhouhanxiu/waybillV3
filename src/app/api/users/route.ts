@@ -8,18 +8,21 @@ import { hashPassword, getSession } from "@/lib/auth";
 
 // GET — 获取用户列表
 export async function GET(req: NextRequest) {
+  // 如果用户表为空，自动初始化默认用户（在权限检查前执行，确保首次部署后可用）
+  let rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
+  if (rows.length === 0) {
+    try {
+      const { seedDefaults } = await import("@/lib/engine/seed");
+      await seedDefaults();
+      rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
+    } catch (e: any) {
+      console.error("seedDefaults failed:", e.message);
+    }
+  }
+
   const session = await getSession();
   if (!session || !session.roles.includes("admin")) {
     return NextResponse.json({ error: "无权限" }, { status: 403 });
-  }
-
-  let rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
-
-  // 如果用户表为空，自动初始化默认用户
-  if (rows.length === 0) {
-    const { seedDefaults } = await import("@/lib/engine/seed");
-    await seedDefaults();
-    rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
   }
 
   const users = rows.map((r: any) => ({

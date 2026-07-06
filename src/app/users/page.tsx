@@ -148,7 +148,9 @@ export default function UsersPage() {
           <div className="text-center py-20 text-ink-faint text-sm">加载中...</div>
         ) : users.length === 0 ? (
           <div className="text-center py-20 bg-card rounded-2xl border border-line">
-            <p className="text-ink-faint mb-4">暂无用户数据</p>
+            <p className="text-ink-faint mb-1">暂无用户数据</p>
+            {error && <p className="text-danger text-xs mb-3">{error}</p>}
+            <p className="text-xs text-ink-faint/70 mb-4">点击下方按钮初始化默认用户，或检查数据库连接</p>
             <button
               onClick={initData}
               disabled={initing}

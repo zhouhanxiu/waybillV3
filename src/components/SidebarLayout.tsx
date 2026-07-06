@@ -13,10 +13,10 @@ import {
   Activity,
   UserCheck,
   Users,
-  Settings,
   LogOut,
   Menu,
   X,
+  FileText,
 } from "lucide-react";
 
 type AuthUser = {
@@ -33,8 +33,8 @@ const menuItems = [
   { href: "/report", label: "异常上报", icon: AlertTriangle },
   { href: "/my-approvals", label: "待我审批", icon: UserCheck, roles: ["admin", "level1_approver", "level2_approver"] },
   { href: "/executions", label: "执行记录", icon: CheckCircle },
+  { href: "/waybills", label: "运单快照", icon: FileText },
   { href: "/config/rules", label: "规则配置", icon: ShieldCheck },
-  { href: "/config/flow", label: "审批流", icon: Settings },
   { href: "/monitor", label: "同步监控", icon: Activity },
   { href: "/users", label: "用户管理", icon: Users, roles: ["admin"] },
 ];
@@ -186,6 +186,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   users: "用户管理",
                   "my-approvals": "我自己审批",
                   executions: "执行记录",
+                  waybills: "运单快照",
                   config: "规则配置",
                   qc: "品控规则",
                   approval: "审批分级",

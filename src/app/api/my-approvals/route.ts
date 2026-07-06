@@ -20,10 +20,12 @@ export async function GET(req: NextRequest) {
   const isL2 = roles.includes("level2_approver");
   const isL1 = roles.includes("level1_approver");
 
-  // 构建审批范围的工单状态
+  // 根据用户角色确定当前可审批的工单状态
+  // level1_approver 处理 pending；level2_approver 处理 level2；admin 可查看全部待审批
   let statusConditions: string[] = [];
-  if (isAdmin || isL2) statusConditions.push("pending", "level1", "level2");
-  else if (isL1) statusConditions.push("pending", "level1");
+  if (isAdmin) statusConditions.push("pending", "level1", "level2");
+  else if (isL2) statusConditions.push("level2");
+  else if (isL1) statusConditions.push("pending");
   else {
     // 普通用户没有审批任务
     return NextResponse.json({ items: [], total: 0, page, pageSize, totalPages: 0 });

@@ -99,7 +99,11 @@ export default function ExecutionsPage() {
           <div className="text-center py-20 text-ink-faint text-sm">加载中...</div>
         ) : tab === "compensation" ? (
           compItems.length === 0 ? (
-            <div className="text-center py-20"><DollarSign className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" /><p className="text-ink-faint">暂无赔付记录</p></div>
+            <div className="text-center py-20 bg-card rounded-2xl border border-line">
+              <DollarSign className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" />
+              <p className="text-ink-faint mb-1">暂无赔付记录</p>
+              <p className="text-xs text-ink-faint/70">工单审批通过后才会自动生成赔付/库存记录</p>
+            </div>
           ) : (
             <div className="bg-card rounded-2xl border border-line overflow-hidden shadow-sm">
               <table className="w-full text-sm">
@@ -135,7 +139,11 @@ export default function ExecutionsPage() {
           )
         ) : (
           invItems.length === 0 ? (
-            <div className="text-center py-20"><Package className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" /><p className="text-ink-faint">暂无库存变更记录</p></div>
+            <div className="text-center py-20 bg-card rounded-2xl border border-line">
+              <Package className="w-12 h-12 text-ink-faint/30 mx-auto mb-3" />
+              <p className="text-ink-faint mb-1">暂无库存变更记录</p>
+              <p className="text-xs text-ink-faint/70">工单审批通过后才会自动生成赔付/库存记录</p>
+            </div>
           ) : (
             <div className="bg-card rounded-2xl border border-line overflow-hidden shadow-sm">
               <table className="w-full text-sm">
