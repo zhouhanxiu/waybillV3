@@ -160,32 +160,40 @@ async function v2Request<T>(
 
 // ──── 公开接口 ─────────────────────────────────────────────────────
 
-/** 校验运单是否存在 + 获取运单详情 */
-export async function getWaybill(externalCode: string): Promise<V2Waybill | null> {
-  try {
-    const data = await v2Request<any[]>(`/api/batches`, {
-      params: { search: externalCode },
-    });
-    // V2 的 batches API 目前按 ID 查询，我们需要一个专门的接口
-    // 这里使用 V2 接口的通用查询方式
-    return null; // 占位，实际取决于 V2 暴露的具体接口
-  } catch {
-    return null;
-  }
-}
-
-/** 校验 SKU 是否归属于指定运单 */
+/** 校验运单是否存在 + 获取 waybill_id */
 export async function verifySkuBelongsToWaybill(
   externalCode: string,
   skuCode: string
-): Promise<boolean> {
+): Promise<{ valid: boolean; waybill_id?: string; reason?: string }> {
   try {
-    const data = await v2Request<{ valid: boolean }>(`/api/waybills/verify-sku`, {
-      params: { external_code: externalCode, sku_code: skuCode },
-    });
-    return data.valid;
+    const data = await v2Request<{ valid: boolean; waybill_id?: string; reason?: string }>(
+      `/api/waybills/verify-sku`,
+      {
+        params: { external_code: externalCode, sku_code: skuCode },
+      }
+    );
+    return data;
   } catch {
-    return false;
+    return { valid: false, reason: "V2 校验失败" };
+  }
+}
+
+/** 获取运单详情（含 items） */
+export async function getWaybill(externalCode: string): Promise<V2Waybill | null> {
+  try {
+    const list = await v2Request<{ total: number; data: any[] }>(`/api/waybills`, {
+      params: { externalCode },
+    });
+    if (!list.data || list.data.length === 0) return null;
+    const wb = list.data[0];
+
+    // 拉取明细
+    const detail = await v2Request<any>(`/api/waybills`, {
+      params: { id: wb.id },
+    });
+    return detail as V2Waybill;
+  } catch {
+    return null;
   }
 }
 

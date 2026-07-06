@@ -25,40 +25,16 @@ export async function POST(req: NextRequest) {
     let v2WaybillId = "";
     try {
       const { verifySkuBelongsToWaybill } = await import("@/lib/v2-client");
-      const { getWaybill } = await import("@/lib/v2-client");
 
       // 调用 V2 接口校验 SKU 是否归属于该运单
-      const valid = await verifySkuBelongsToWaybill(external_code, sku_code);
-      if (!valid) {
-        return NextResponse.json({ error: `运单 ${external_code} 不存在或 SKU ${sku_code} 不属于该运单` }, { status: 400 });
-      }
-
-      // 获取运单信息，拿到 V2 的运单 ID 用于关联
-      const wb = await getWaybill(external_code);
-      v2WaybillId = wb?.id || "";
-
-      // 写入/更新本地快照（用于后续工单展示，但不作为校验依据）
-      const snapshots = await query(
-        "SELECT * FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-        [external_code]
-      );
-      if (snapshots.length === 0 && wb) {
-        const snapId = uid("snap");
-        await query(
-          `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
-           VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-          [snapId, external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
+      const check = await verifySkuBelongsToWaybill(external_code, sku_code);
+      if (!check.valid) {
+        return NextResponse.json(
+          { error: `运单 ${external_code} 不存在或 SKU ${sku_code} 不属于该运单` },
+          { status: 400 }
         );
-        if (wb.items && wb.items.length > 0) {
-          for (const item of wb.items) {
-            await query(
-              `INSERT INTO waybill_item_snapshots (id, waybill_snapshot_id, sku_code, sku_name, quantity, spec)
-               VALUES ($1,$2,$3,$4,$5,$6)`,
-              [uid("wbitem"), snapId, item.sku_code, item.sku_name, item.quantity, item.spec || ""]
-            );
-          }
-        }
       }
+      v2WaybillId = check.waybill_id || "";
     } catch (err: any) {
       if (process.env.NODE_ENV === "development" || isMockMode()) {
         return NextResponse.json({
@@ -70,15 +46,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `V2 运单校验失败: ${err.message}` }, { status: 500 });
     }
 
-    // 使用本地快照 ID 或 V2 运单 ID 作为关联
-    let waybillId = v2WaybillId;
-    try {
-      const snap = await query(
-        "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-        [external_code]
-      );
-      if (snap.length > 0) waybillId = snap[0].id;
-    } catch { /* 降级使用 v2WaybillId */ }
+    // 使用 V2 运单 ID 作为关联（本地快照表结构与 V2 解耦，不强制写入）
+    const waybillId = v2WaybillId;
 
     // 检查是否已有未关闭的品控工单（幂等性）
     const existingTickets = await query(
