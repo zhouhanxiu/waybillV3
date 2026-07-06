@@ -603,10 +603,10 @@ export default function TestRunnerPage() {
       try {
         const r = await fetch(doc.path);
         const size = r.ok ? (await r.text()).length : 0;
-        t6(`文档"${doc.label}"`, r.ok && size > 100, doc.pts,
+        t6(`文档"${doc.label}" (${doc.pts}pts)`, r.ok && size > 100,
           r.ok ? `${(size / 1024).toFixed(1)}KB` : `status=${r.status}`);
       } catch {
-        t6(`文档"${doc.label}"`, false, doc.pts, "获取失败");
+        t6(`文档"${doc.label}" (${doc.pts}pts)`, false, "获取失败");
       }
     }
 
