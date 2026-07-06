@@ -10,8 +10,8 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 1,          // serverless 单实例 1 连接，避免打爆 Supabase PgBouncer 15 上限
-      idle_timeout: 5,
+      max: 3,
+      idle_timeout: 20,
       connect_timeout: 10,
     });
   }
