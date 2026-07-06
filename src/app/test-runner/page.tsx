@@ -618,12 +618,12 @@ export default function TestRunnerPage() {
         const kws = ["分级审批", "阈值", "超时时长", "重提次数", "物流异常类型", "角色权限", "数据同步", "品控暂扣", "品控规则"];
         let covered = 0;
         kws.forEach(kw => { if (content.includes(kw)) covered++; });
-        t6(`假设文档覆盖${covered}/${kws.length}项留白点`, covered >= 7, 4, `覆盖${covered}项`);
+        t6(`假设文档覆盖${covered}/${kws.length}项留白点 (4pts)`, covered >= 7, `覆盖${covered}项`);
       } else {
-        t6("假设文档覆盖留白点", false, 4, "文档不可读");
+        t6("假设文档覆盖留白点 (4pts)", false, "文档不可读");
       }
     } catch {
-      t6("假设文档覆盖留白点", false, 4, "获取失败");
+      t6("假设文档覆盖留白点 (4pts)", false, "获取失败");
     }
 
     // ──── 完成 ────────────────────────────────────────────────────
