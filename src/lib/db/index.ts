@@ -1,8 +1,6 @@
 import postgres from "postgres";
 
 let sql: ReturnType<typeof postgres> | null = null;
-let dbInitialized = false;
-let dbInitPromise: Promise<void> | null = null;
 
 export function getDb() {
   const url = process.env.DATABASE_URL;
@@ -18,22 +16,7 @@ export function getDb() {
   return sql;
 }
 
-async function ensureDb() {
-  if (dbInitialized) return;
-  if (!dbInitPromise) {
-    dbInitPromise = initDb().then(() => { dbInitialized = true; });
-  }
-  try {
-    await dbInitPromise;
-  } catch {
-    // 初始化失败（如连接池满），重置后下次请求重试
-    dbInitPromise = null;
-    throw new Error("数据库初始化失败，请重试");
-  }
-}
-
 export async function query<T = any>(sqlText: string, params?: any[]) {
-  await ensureDb();
   const db = getDb();
   return (await db.unsafe(sqlText, params)) as T[];
 }
@@ -209,9 +192,8 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at)`,
   ];
 
-  const db = getDb();
   for (const sqlText of statements) {
-    await db.unsafe(sqlText);
+    await query(sqlText);
   }
 
   // ──── 兼容迁移：为旧表补充缺失列 ──────────────────────────────────
@@ -243,7 +225,7 @@ export async function initDb() {
   for (const [table, statements] of Object.entries(migrations)) {
     for (const sqlText of statements) {
       try {
-        await db.unsafe(sqlText);
+        await query(sqlText);
       } catch { /* 忽略单个迁移错误 */ }
     }
   }
@@ -251,10 +233,10 @@ export async function initDb() {
   // 兼容迁移：为没有密码的旧用户设置默认密码
   try {
     const { hashPassword } = await import("../auth");
-    const rows = await db.unsafe("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
+    const rows = await query("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
     for (const r of rows as any[]) {
       const pwHash = await hashPassword("admin");
-      await db.unsafe("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
+      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
   } catch { /* 忽略迁移错误 */ }
 }

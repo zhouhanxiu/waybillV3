@@ -2,13 +2,12 @@
  * 用户管理 API — 仅 admin 可操作
  */
 import { NextRequest, NextResponse } from "next/server";
-import { query, initDb } from "@/lib/db";
+import { query } from "@/lib/db";
 import { uid } from "@/lib/utils";
 import { hashPassword, getSession } from "@/lib/auth";
 
 // GET — 获取用户列表
 export async function GET(req: NextRequest) {
-  await initDb();
   // 如果用户表为空，自动初始化默认用户（在权限检查前执行，确保首次部署后可用）
   let rows = await query("SELECT id, name, display_name, roles, active, created_at, updated_at FROM users ORDER BY created_at DESC");
   if (rows.length === 0) {
