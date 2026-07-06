@@ -17,6 +17,7 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<any>(null);
   const [form, setForm] = useState({ name: "", password: "", display_name: "", roles: ["reporter"] });
   const [error, setError] = useState("");
+  const [initing, setIniting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -29,6 +30,24 @@ export default function UsersPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const initData = async () => {
+    setIniting(true);
+    try {
+      const res = await fetch("/api/init-db");
+      const data = await res.json();
+      if (res.ok) {
+        setError("");
+        await load();
+      } else {
+        setError(data.error || "初始化失败");
+      }
+    } catch {
+      setError("初始化请求失败");
+    } finally {
+      setIniting(false);
+    }
+  };
 
   const toggleRole = (role: string) => {
     setForm(f => ({
@@ -127,6 +146,17 @@ export default function UsersPage() {
 
         {loading ? (
           <div className="text-center py-20 text-ink-faint text-sm">加载中...</div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-20 bg-card rounded-2xl border border-line">
+            <p className="text-ink-faint mb-4">暂无用户数据</p>
+            <button
+              onClick={initData}
+              disabled={initing}
+              className="px-4 py-2 rounded-xl bg-jingtian text-white text-sm font-medium hover:bg-jingtian-dark disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {initing ? "初始化中..." : "初始化默认用户"}
+            </button>
+          </div>
         ) : (
           <div className="bg-card rounded-2xl border border-line overflow-hidden shadow-sm">
             <table className="w-full text-sm">
