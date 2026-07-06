@@ -39,9 +39,9 @@ export async function GET(req: NextRequest) {
     );
     const today_scans = parseInt(todayScanResult[0]?.total || "0");
 
-    // 品控暂扣
+    // 品控暂扣：扫描来源且未关闭的工单
     const qcHoldResult = await query(
-      "SELECT COUNT(*) as total FROM scan_records WHERE batch_status = 'qc_hold'"
+      "SELECT COUNT(*) as total FROM exception_tickets WHERE source = 'scan_auto' AND status NOT IN ('done','closed')"
     );
     const qc_hold_count = parseInt(qcHoldResult[0]?.total || "0");
 
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
         pending_tickets: 7,
         overdue_tickets: 2,
         today_scans: 4,
-        qc_hold_count: 2,
+        qc_hold_count: 3,
         completed_today: 2,
       });
     }
