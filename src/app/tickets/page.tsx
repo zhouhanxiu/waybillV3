@@ -93,6 +93,8 @@ function TicketsLoading() {
 
 function TicketsPageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const initialStatus = searchParams.get("status") || "";
   const initialOverdue = searchParams.get("overdue") === "true";
   const initialType = searchParams.get("type") || "";
