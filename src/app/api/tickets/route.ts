@@ -91,8 +91,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { waybill_snapshot_id, external_code, exception_type, source, severity, description, amount, reporter } = body;
 
-    if (!waybill_snapshot_id || !external_code || !exception_type || !reporter) {
+    if (!external_code || !exception_type || !reporter) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
+    }
+
+    // 确保本地快照存在
+    let snapshotId = waybill_snapshot_id || "";
+    if (!snapshotId) {
+      const existing = await query(
+        "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
+        [external_code]
+      );
+      if (existing.length > 0) {
+        snapshotId = existing[0].id;
+      } else {
+        snapshotId = uid("snap");
+        await query(
+          `INSERT INTO waybill_snapshots (id, external_code, synced_at) VALUES ($1,$2,NOW())`,
+          [snapshotId, external_code]
+        );
+      }
     }
 
     // 检查同类型未关闭工单
@@ -146,7 +164,7 @@ export async function POST(req: NextRequest) {
     await query(
       `INSERT INTO exception_tickets (id, waybill_snapshot_id, external_code, exception_type, source, severity, description, amount, reporter, status, retry_count, max_retry, due_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [id, waybill_snapshot_id, external_code, exception_type, source || "manual", severity || "medium", description || "", amount || 0, reporter, initialStatus, 0, maxRetry, dueAt]
+      [id, snapshotId, external_code, exception_type, source || "manual", severity || "medium", description || "", amount || 0, reporter, initialStatus, 0, maxRetry, dueAt]
     );
 
     // 如果品控工单，回写 V2
