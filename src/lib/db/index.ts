@@ -23,7 +23,13 @@ async function ensureDb() {
   if (!dbInitPromise) {
     dbInitPromise = initDb().then(() => { dbInitialized = true; });
   }
-  await dbInitPromise;
+  try {
+    await dbInitPromise;
+  } catch {
+    // 初始化失败（如连接池满），重置后下次请求重试
+    dbInitPromise = null;
+    throw new Error("数据库初始化失败，请重试");
+  }
 }
 
 export async function query<T = any>(sqlText: string, params?: any[]) {
