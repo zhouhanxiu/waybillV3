@@ -3,11 +3,19 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { checkV2Health } from "@/lib/v2-client";
+import { checkV2Health, getV2BaseUrl } from "@/lib/v2-client";
+
 
 export async function GET(req: NextRequest) {
   // V2 健康检查（不依赖 DB）
-  const v2Healthy = await checkV2Health();
+  let v2Healthy = false;
+  let v2Error: string | null = null;
+  try {
+    v2Healthy = await checkV2Health();
+  } catch (err: any) {
+    v2Error = err.message || String(err);
+  }
+
 
   // DB 相关数据（无 DB 时使用空值降级）
   let lastSyncAt: string | null = null;
@@ -56,8 +64,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     v2_healthy: v2Healthy,
+    v2_base_url: getV2BaseUrl(),
+    v2_error: v2Error,
     last_sync_at: lastSyncAt,
     stats_24h: stats24h,
     recent_logs: recentLogs,
   });
+
 }

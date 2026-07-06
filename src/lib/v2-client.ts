@@ -3,10 +3,24 @@
  */
 import { uid } from "./utils";
 
-const V2_BASE_URL = (process.env.V2_API_BASE_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app").trim();
+let V2_BASE_URL = (process.env.V2_API_BASE_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app").trim();
+
+// 防御：旧默认域名/无协议/带尾斜杠 自动修正
+if (V2_BASE_URL.includes("20260704155001.vercel.app") && !V2_BASE_URL.includes("-v3-")) {
+  V2_BASE_URL = "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
+}
+if (!V2_BASE_URL.startsWith("http://") && !V2_BASE_URL.startsWith("https://")) {
+  V2_BASE_URL = `https://${V2_BASE_URL}`;
+}
+V2_BASE_URL = V2_BASE_URL.replace(/\/$/, "");
+
 const V2_API_KEY = process.env.V2_API_KEY || "v3-internal-key";
 const REQUEST_TIMEOUT_MS = parseInt(process.env.V2_REQUEST_TIMEOUT || "10000");
 const MAX_RETRIES = parseInt(process.env.V2_MAX_RETRIES || "2");
+
+export function getV2BaseUrl(): string {
+  return V2_BASE_URL;
+}
 
 export type V2Waybill = {
   id: string;
