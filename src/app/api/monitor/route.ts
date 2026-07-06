@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const lastSync = await query(
-      "SELECT * FROM sync_logs WHERE success = true ORDER BY created_at DESC LIMIT 1"
+      "SELECT created_at FROM sync_logs WHERE success = true ORDER BY created_at DESC LIMIT 1"
     );
     lastSyncAt = lastSync[0]?.created_at || null;
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     };
 
     const logs = await query(
-      "SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 20"
+      "SELECT id, request_id, endpoint, method, status_code, success, duration_ms, error_message, created_at FROM sync_logs ORDER BY created_at DESC LIMIT 20"
     );
     recentLogs = logs.map((l) => ({
       id: l.id,

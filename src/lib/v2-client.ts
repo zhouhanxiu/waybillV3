@@ -33,25 +33,30 @@ async function logSync(params: {
   durationMs?: number;
   errorMessage?: string;
 }) {
-  try {
-    // 写入同步日志（内联，避免循环依赖）
-    const { getDb } = await import("./db");
-    const db = getDb();
-    await db.unsafe(
-      `INSERT INTO sync_logs (id, request_id, endpoint, method, params_summary, status_code, success, duration_ms, error_message)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [
-        uid("synclog"),
-        params.requestId,
-        params.endpoint,
-        params.method,
-        params.paramsSummary || "",
-        params.statusCode || null,
-        params.success,
-        params.durationMs || null,
-        params.errorMessage || null,
-      ]
-    );
+    // 日志记录改为异步、不阻塞主请求，避免日志写入拖慢响应
+    queueMicrotask(async () => {
+      try {
+        const { getDb } = await import("./db");
+        const db = getDb();
+        await db.unsafe(
+          `INSERT INTO sync_logs (id, request_id, endpoint, method, params_summary, status_code, success, duration_ms, error_message)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [
+            uid("synclog"),
+            params.requestId,
+            params.endpoint,
+            params.method,
+            params.paramsSummary || "",
+            params.statusCode || null,
+            params.success,
+            params.durationMs || null,
+            params.errorMessage || null,
+          ]
+        );
+      } catch {
+        // 日志记录失败不应影响主流程
+      }
+    });
   } catch {
     // 日志记录失败不应影响主流程
   }

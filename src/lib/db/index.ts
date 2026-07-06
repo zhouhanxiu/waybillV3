@@ -8,7 +8,7 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 10,
+      max: 3,          // 降低连接数减少内存
       idle_timeout: 20,
       connect_timeout: 10,
     });
@@ -172,10 +172,12 @@ export async function initDb() {
     // 索引
     `CREATE INDEX IF NOT EXISTS idx_tickets_status ON exception_tickets(status)`,
     `CREATE INDEX IF NOT EXISTS idx_tickets_reporter ON exception_tickets(reporter)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON exception_tickets(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_approvals_ticket ON approval_records(ticket_id)`,
     `CREATE INDEX IF NOT EXISTS idx_scan_ticket ON scan_records(ticket_id)`,
     `CREATE INDEX IF NOT EXISTS idx_scan_batch_status ON scan_records(batch_status)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_logs_req ON sync_logs(request_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at)`,
   ];
 
   for (const sqlText of statements) {

@@ -11,7 +11,7 @@ export async function GET(
   try {
     const { id: ticketId } = await params;
     const rows = await query(
-      "SELECT * FROM approval_records WHERE ticket_id = $1 ORDER BY created_at ASC",
+      "SELECT id, ticket_id, approver, level, action, opinion, ai_suggestion, created_at FROM approval_records WHERE ticket_id = $1 ORDER BY created_at ASC LIMIT 100",
       [ticketId]
     );
 

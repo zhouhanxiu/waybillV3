@@ -1,0 +1,20 @@
+✓ Lockfile passes supply-chain policies (verified 15h ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: sharp@0.34.5, unrs-resolver@1.12.2
+
+Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+[ERROR] Command failed with exit code 1: "C:\nvm4w\nodejs\node.exe" "C:\nvm4w\nodejs\node_modules\pnpm\bin\pnpm.mjs" install
+
+pnpm: Command failed with exit code 1: "C:\nvm4w\nodejs\node.exe" "C:\nvm4w\nodejs\node_modules\pnpm\bin\pnpm.mjs" install
+    at getFinalError (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:36339:14)
+    at makeError (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:38646:21)
+    at getSyncResult (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:40490:10)
+    at spawnSubprocessSync (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:40450:14)
+    at execaCoreSync (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:40380:23)
+    at callBoundExeca (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:42908:23)
+    at boundExeca (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:42885:49)
+    at sync (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:43044:10)
+    at runPnpmCli (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:247663:5)
+    at runDepsStatusCheck (file:///C:/Users/ztocc/AppData/Local/nvm/v24.14.1/node_modules/pnpm/dist/pnpm.mjs:249406:7)

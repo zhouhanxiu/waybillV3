@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search,
   Filter,
@@ -86,7 +86,7 @@ export default function TicketsPage() {
 
   const pageSize = 20;
 
-  const loadTickets = useCallback(async () => {
+  const loadTickets = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -95,20 +95,27 @@ export default function TicketsPage() {
       if (filter.status) params.set("status", filter.status);
       if (filter.type) params.set("type", filter.type);
 
-      const res = await fetch(`/api/tickets?${params}`);
+      const res = await fetch(`/api/tickets?${params}`, { signal });
       const data = await res.json();
       setTickets(data.items || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        // ignore aborted requests
+      }
     } finally {
       setLoading(false);
     }
   }, [page, filter]);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
-    loadTickets();
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    loadTickets(ctrl.signal);
   }, [loadTickets]);
 
   const viewDetail = async (ticketId: string) => {

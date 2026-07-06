@@ -79,10 +79,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 加载品控规则
+    // 加载品控规则（只取必要字段，减少内存和JSON.parse开销）
     const qcRules = await query(
-      "SELECT * FROM qc_rules WHERE enabled = true ORDER BY severity DESC"
+      `SELECT id, exception_subtype, severity, approval_level,
+        CASE WHEN condition::text = 'null' THEN '[]' ELSE condition::text END as condition_text
+       FROM qc_rules
+       WHERE enabled = true
+       ORDER BY severity DESC
+       LIMIT 100`
     );
+
 
     // 执行品控检测
     const qcResult = evaluateQcResult(
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
       damage_level || 0,
       spec_match !== false,
       qcRules.map((r) => ({
-        condition: typeof r.condition === "string" ? JSON.parse(r.condition) : r.condition,
+        condition: JSON.parse(r.condition_text || "[]"),
         severity: r.severity,
         exception_subtype: r.exception_subtype,
         approval_level: r.approval_level,
