@@ -21,51 +21,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 校验运单是否存在 — 通过 V2 HTTP API，自动同步到本地快照
-    let waybillId = "";
+    // 校验运单和 SKU — 通过 V2 HTTP API 实时校验，不走本地快照
+    let v2WaybillId = "";
     try {
-      // 先查本地快照
+      const { verifySkuBelongsToWaybill } = await import("@/lib/v2-client");
+      const { getWaybill } = await import("@/lib/v2-client");
+
+      // 调用 V2 接口校验 SKU 是否归属于该运单
+      const valid = await verifySkuBelongsToWaybill(external_code, sku_code);
+      if (!valid) {
+        return NextResponse.json({ error: `运单 ${external_code} 不存在或 SKU ${sku_code} 不属于该运单` }, { status: 400 });
+      }
+
+      // 获取运单信息，拿到 V2 的运单 ID 用于关联
+      const wb = await getWaybill(external_code);
+      v2WaybillId = wb?.id || "";
+
+      // 写入/更新本地快照（用于后续工单展示，但不作为校验依据）
       const snapshots = await query(
-        "SELECT * FROM waybill_snapshots WHERE external_code = $1 ORDER BY synced_at DESC LIMIT 1",
+        "SELECT * FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
         [external_code]
       );
-
-      if (snapshots.length > 0) {
-        waybillId = snapshots[0].id;
-      } else {
-        // 本地没有，从 V2 拉取并写入快照
-        const { syncWaybillsFromV2 } = await import("@/lib/v2-client");
-        const v2Waybills = await syncWaybillsFromV2([external_code]);
-        if (v2Waybills.length === 0) {
-          return NextResponse.json({ error: "运单不存在" }, { status: 404 });
-        }
-
-        const wb = v2Waybills[0];
-        waybillId = uid("snap");
+      if (snapshots.length === 0 && wb) {
+        const snapId = uid("snap");
         await query(
           `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
            VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-          [waybillId, wb.external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
+          [snapId, external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
         );
-
         if (wb.items && wb.items.length > 0) {
           for (const item of wb.items) {
             await query(
               `INSERT INTO waybill_item_snapshots (id, waybill_snapshot_id, sku_code, sku_name, quantity, spec)
                VALUES ($1,$2,$3,$4,$5,$6)`,
-              [uid("wbitem"), waybillId, item.sku_code, item.sku_name, item.quantity, item.spec || ""]
+              [uid("wbitem"), snapId, item.sku_code, item.sku_name, item.quantity, item.spec || ""]
             );
           }
         }
-      }
-
-      // 校验 SKU 是否归属于该运单
-      const items = await query(
-        "SELECT * FROM waybill_item_snapshots WHERE waybill_snapshot_id = $1 AND sku_code = $2",
-        [waybillId, sku_code]
-      );
-      if (items.length === 0) {
-        return NextResponse.json({ error: `SKU ${sku_code} 不属于运单 ${external_code}` }, { status: 400 });
       }
     } catch (err: any) {
       if (process.env.NODE_ENV === "development" || isMockMode()) {
@@ -75,8 +67,18 @@ export async function POST(req: NextRequest) {
           message: "演示模式：扫描检测通过（未配置真实数据库，数据未持久化）",
         });
       }
-      return NextResponse.json({ error: `运单校验失败: ${err.message}` }, { status: 500 });
+      return NextResponse.json({ error: `V2 运单校验失败: ${err.message}` }, { status: 500 });
     }
+
+    // 使用本地快照 ID 或 V2 运单 ID 作为关联
+    let waybillId = v2WaybillId;
+    try {
+      const snap = await query(
+        "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
+        [external_code]
+      );
+      if (snap.length > 0) waybillId = snap[0].id;
+    } catch { /* 降级使用 v2WaybillId */ }
 
     // 检查是否已有未关闭的品控工单（幂等性）
     const existingTickets = await query(
