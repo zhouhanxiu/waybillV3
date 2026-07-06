@@ -95,29 +95,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 手动异常上报：先校验 V2 中是否存在该运单
-    const { getWaybill } = await import("@/lib/v2-client");
-    const wb = await getWaybill(external_code);
-    if (!wb) {
-      return NextResponse.json({ error: `运单号 ${external_code} 在 V2 中不存在` }, { status: 400 });
+    // 统一校验：运单在 V2 是否存在 + 确保本地快照
+    const { validateWaybillInV2 } = await import("@/lib/v2-client");
+    const vResult = await validateWaybillInV2(external_code);
+    if (!vResult.valid) {
+      return NextResponse.json({ error: vResult.reason }, { status: 400 });
     }
-
-    // 确保本地快照存在（使用 V2 真实数据填充）
-    let snapshotId = "";
-    const snapRows = await query(
-      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-      [external_code]
-    );
-    if (snapRows.length > 0) {
-      snapshotId = snapRows[0].id;
-    } else {
-      snapshotId = uid("snap");
-      await query(
-        `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
-         VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-        [snapshotId, external_code, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
-      );
-    }
+    const snapshotId = vResult.snapshotId;
 
     // 检查同类型未关闭工单
     const existing = await query(

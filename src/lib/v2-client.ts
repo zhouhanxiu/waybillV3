@@ -243,3 +243,47 @@ export async function checkV2Health(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * 统一入口：校验运单在 V2 是否存在，并在 V3 本地确保快照存在。
+ * 所有涉及运单号的接口都应通过此函数校验。
+ * @returns { valid, snapshotId, waybill } — valid=false 时需拒绝请求
+ */
+export async function validateWaybillInV2(externalCode: string): Promise<{
+  valid: boolean;
+  snapshotId: string;
+  waybill: V2Waybill | null;
+  reason?: string;
+}> {
+  try {
+    // 1. 校验 V2 是否存在该运单
+    const wb = await getWaybill(externalCode);
+    if (!wb) {
+      return { valid: false, snapshotId: "", waybill: null, reason: `运单号 ${externalCode} 在 V2 中不存在` };
+    }
+
+    // 2. 确保本地快照存在
+    const { getDb } = await import("./db");
+    const db = getDb();
+    const snapRows = await db.unsafe(
+      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
+      [externalCode]
+    );
+
+    let snapshotId: string;
+    if (snapRows.length > 0) {
+      snapshotId = (snapRows[0] as any).id;
+    } else {
+      snapshotId = uid("snap");
+      await db.unsafe(
+        `INSERT INTO waybill_snapshots (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+        [snapshotId, externalCode, wb.store_name || "", wb.receiver_name || "", wb.receiver_phone || "", wb.receiver_address || ""]
+      );
+    }
+
+    return { valid: true, snapshotId, waybill: wb };
+  } catch (err: any) {
+    return { valid: false, snapshotId: "", waybill: null, reason: `V2 连接失败: ${err.message}` };
+  }
+}

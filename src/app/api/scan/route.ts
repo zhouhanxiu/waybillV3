@@ -43,21 +43,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `V2 运单校验失败: ${err.message}` }, { status: 500 });
     }
 
-    // 确保本地快照存在（外键约束需要 waybill_snapshots.id）
-    let waybillId = "";
-    const existingSnaps = await query(
-      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-      [external_code]
-    );
-    if (existingSnaps.length > 0) {
-      waybillId = existingSnaps[0].id;
-    } else {
-      waybillId = uid("snap");
-      await query(
-        `INSERT INTO waybill_snapshots (id, external_code, synced_at) VALUES ($1,$2,NOW())`,
-        [waybillId, external_code]
-      );
+    // 确保本地快照存在（统一入口：校验 V2 + 快照）
+    const { validateWaybillInV2 } = await import("@/lib/v2-client");
+    const vResult = await validateWaybillInV2(external_code);
+    if (!vResult.valid) {
+      return NextResponse.json({ error: vResult.reason }, { status: 500 });
     }
+    const waybillId = vResult.snapshotId;
 
     // 检查是否已有未关闭的品控工单（幂等性）
     const existingTickets = await query(
