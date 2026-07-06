@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const reporter = searchParams.get("reporter");
     const type = searchParams.get("type");
+    const source = searchParams.get("source");
     const overdue = searchParams.get("overdue");
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
@@ -30,10 +31,12 @@ export async function GET(req: NextRequest) {
     const params: any[] = [];
     let paramIdx = 0;
 
-    if (status) {
-      paramIdx++;
-      sql += ` AND status = $${paramIdx}`;
-      params.push(status);
+    // 支持逗号分隔多状态
+    const statusList = status ? status.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (statusList.length > 0) {
+      const placeholders = statusList.map(() => { paramIdx++; return `$${paramIdx}`; }).join(", ");
+      sql += ` AND status IN (${placeholders})`;
+      params.push(...statusList);
     }
     if (reporter) {
       paramIdx++;
@@ -44,6 +47,11 @@ export async function GET(req: NextRequest) {
       paramIdx++;
       sql += ` AND exception_type = $${paramIdx}`;
       params.push(type);
+    }
+    if (source) {
+      paramIdx++;
+      sql += ` AND source = $${paramIdx}`;
+      params.push(source);
     }
 
     if (overdue === "true") {
@@ -72,13 +80,34 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
     });
   } catch (err: any) {
-    // Demo 模式：无真实数据库时返回空列表
+    // Demo 模式：无真实数据库时返回模拟数据
     if (process.env.NODE_ENV === "development" || isMockMode()) {
+      const mockItems = getMockTickets();
+      const items = id
+        ? mockItems.filter(t => t.id === id)
+        : mockItems;
+      // 筛选
+      let filtered = [...items];
+      const { searchParams } = new URL(req.url);
+      const status = searchParams.get("status");
+      const source = searchParams.get("source");
+      const type = searchParams.get("type");
+      const overdue = searchParams.get("overdue");
+      if (status) {
+        const statusList = status.split(",").map(s => s.trim());
+        filtered = filtered.filter(t => statusList.includes(t.status));
+      }
+      if (source) filtered = filtered.filter(t => t.source === source);
+      if (type) filtered = filtered.filter(t => t.exception_type === type);
+      if (overdue === "true") {
+        filtered = filtered.filter(t => t.overdue && !["done", "closed"].includes(t.status));
+      }
+      if (id && filtered.length === 1) return NextResponse.json(filtered[0]);
       return NextResponse.json({
-        items: [],
-        total: 0,
+        items: filtered,
+        total: filtered.length,
         page: 1,
-        pageSize: 20,
+        pageSize: filtered.length,
         totalPages: 1,
       });
     }
@@ -424,4 +453,26 @@ function mapTicket(row: any) {
     due_at: row.due_at,
     overdue: row.due_at ? new Date() > new Date(row.due_at) : false,
   };
+}
+
+// ──── Mock 测试数据 ────────────────────────────────────────────────
+function getMockTickets() {
+  const now = new Date();
+  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+  return [
+    { id: "ticket_001", waybill_snapshot_id: "snap_001", external_code: "EXP001", exception_type: "lost", source: "manual", severity: "high", description: "客户反馈包裹未收到，物流轨迹中断", amount: 1200, reporter: "operator_lisa", status: "level2", retry_count: 0, max_retry: 3, created_at: twoDaysAgo, updated_at: twoDaysAgo, due_at: new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString(), overdue: true },
+    { id: "ticket_002", waybill_snapshot_id: "snap_002", external_code: "EXP002", exception_type: "damaged", source: "manual", severity: "medium", description: "外包装破损，内件疑似受潮", amount: 80, reporter: "operator_mike", status: "pending", retry_count: 0, max_retry: 3, created_at: twoHoursAgo, updated_at: twoHoursAgo, due_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(), overdue: false },
+    { id: "ticket_003", waybill_snapshot_id: "snap_003", external_code: "EXP003", exception_type: "qty_mismatch", source: "scan_auto", severity: "low", description: "扫描复核发现少件 3 个", amount: 45, reporter: "operator_jim", status: "level2", retry_count: 0, max_retry: 3, created_at: twoDaysAgo, updated_at: twoDaysAgo, due_at: new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString(), overdue: true },
+    { id: "ticket_004", waybill_snapshot_id: "snap_004", external_code: "EXP004", exception_type: "wrong_address", source: "manual", severity: "medium", description: "客户地址变更，需重新配送", amount: 300, reporter: "operator_lisa", status: "level1", retry_count: 0, max_retry: 3, created_at: twoHoursAgo, updated_at: twoHoursAgo, due_at: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(), overdue: false },
+    { id: "ticket_005", waybill_snapshot_id: "snap_005", external_code: "EXP005", exception_type: "appearance", source: "scan_auto", severity: "high", description: "玻璃制品破损，无法二次销售", amount: 600, reporter: "operator_mike", status: "level2", retry_count: 0, max_retry: 3, created_at: twoDaysAgo, updated_at: twoDaysAgo, due_at: new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(), overdue: true },
+    { id: "ticket_006", waybill_snapshot_id: "snap_006", external_code: "EXP006", exception_type: "lost", source: "manual", severity: "medium", description: "分拨中心丢件", amount: 150, reporter: "operator_jim", status: "level1", retry_count: 0, max_retry: 3, created_at: twoHoursAgo, updated_at: twoHoursAgo, due_at: new Date(now.getTime() + 3 * 60 * 60 * 1000).toISOString(), overdue: false },
+    { id: "ticket_007", waybill_snapshot_id: "snap_007", external_code: "EXP007", exception_type: "qty_mismatch", source: "scan_auto", severity: "low", description: "整箱短少 1 件", amount: 60, reporter: "operator_lisa", status: "pending", retry_count: 0, max_retry: 3, created_at: twoHoursAgo, updated_at: twoHoursAgo, due_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(), overdue: false },
+    { id: "ticket_008", waybill_snapshot_id: "snap_008", external_code: "EXP008", exception_type: "damaged", source: "manual", severity: "high", description: "超时未处理：易碎品破损", amount: 800, reporter: "operator_mike", status: "level2", retry_count: 0, max_retry: 3, created_at: twoDaysAgo, updated_at: twoDaysAgo, due_at: new Date(now.getTime() - 18 * 60 * 60 * 1000).toISOString(), overdue: true },
+    { id: "ticket_009", waybill_snapshot_id: "snap_009", external_code: "EXP009", exception_type: "lost", source: "manual", severity: "critical", description: "超时未处理：高价值包裹丢失", amount: 1500, reporter: "operator_jim", status: "level2", retry_count: 0, max_retry: 3, created_at: twoDaysAgo, updated_at: twoDaysAgo, due_at: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(), overdue: true },
+    { id: "ticket_010", waybill_snapshot_id: "snap_010", external_code: "EXP010", exception_type: "qty_mismatch", source: "manual", severity: "low", description: "已补货完成", amount: 50, reporter: "operator_lisa", status: "done", retry_count: 0, max_retry: 3, created_at: today, updated_at: today, due_at: null, overdue: false },
+    { id: "ticket_011", waybill_snapshot_id: "snap_011", external_code: "EXP011", exception_type: "wrong_address", source: "manual", severity: "medium", description: "已重新发货完成", amount: 200, reporter: "operator_mike", status: "closed", retry_count: 0, max_retry: 3, created_at: today, updated_at: today, due_at: null, overdue: false },
+  ];
 }

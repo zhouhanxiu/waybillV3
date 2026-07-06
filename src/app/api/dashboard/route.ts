@@ -63,12 +63,12 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     if (process.env.NODE_ENV === "development" || isMockMode()) {
       return NextResponse.json({
-        total_tickets: 0,
-        pending_tickets: 0,
-        overdue_tickets: 0,
-        today_scans: 0,
-        qc_hold_count: 0,
-        completed_today: 0,
+        total_tickets: 11,
+        pending_tickets: 7,
+        overdue_tickets: 2,
+        today_scans: 4,
+        qc_hold_count: 2,
+        completed_today: 2,
       });
     }
     return NextResponse.json({ error: err.message }, { status: 500 });

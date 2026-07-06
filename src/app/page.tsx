@@ -79,7 +79,7 @@ export default function DashboardPage() {
       icon: AlertTriangle,
       color: "text-warn",
       bg: "bg-warn-bg",
-      href: "/tickets?status=pending",
+      href: "/tickets?status=pending,level1,level2,executing",
     },
     {
       title: "已超时",
@@ -103,7 +103,7 @@ export default function DashboardPage() {
       icon: Shield,
       color: "text-warn",
       bg: "bg-warn-bg",
-      href: "/scan",
+      href: "/tickets?source=scan_auto&status=pending,level1,level2,executing",
     },
     {
       title: "今日完成",
@@ -111,7 +111,7 @@ export default function DashboardPage() {
       icon: CheckCircle2,
       color: "text-success",
       bg: "bg-jingtian-soft",
-      href: "/tickets?status=done",
+      href: "/tickets?status=done,closed",
     },
   ];
 

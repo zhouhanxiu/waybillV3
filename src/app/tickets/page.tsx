@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import SidebarLayout from "@/components/SidebarLayout";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
   Filter,
@@ -96,13 +96,19 @@ function TicketsPageInner() {
   const initialStatus = searchParams.get("status") || "";
   const initialOverdue = searchParams.get("overdue") === "true";
   const initialType = searchParams.get("type") || "";
+  const initialSource = searchParams.get("source") || "";
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ status: initialOverdue ? "overdue" : initialStatus, type: initialType, overdue: initialOverdue });
+  const [filter, setFilter] = useState({
+    status: initialOverdue ? "overdue" : initialStatus,
+    type: initialType,
+    overdue: initialOverdue,
+    source: initialSource,
+  });
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ ticket: Ticket; approvals: ApprovalRecord[] } | null>(null);
   const [approvalForm, setApprovalForm] = useState({ approver: "", action: "approve", opinion: "" });
@@ -119,6 +125,7 @@ function TicketsPageInner() {
       params.set("pageSize", String(pageSize));
       if (filter.status && filter.status !== "overdue") params.set("status", filter.status);
       if (filter.type) params.set("type", filter.type);
+      if (filter.source) params.set("source", filter.source);
       if (filter.status === "overdue" || filter.overdue) params.set("overdue", "true");
 
       const res = await fetch(`/api/tickets?${params}`, { signal });
@@ -134,6 +141,17 @@ function TicketsPageInner() {
       setLoading(false);
     }
   }, [page, filter]);
+
+  // 筛选变化时同步 URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filter.status && filter.status !== "overdue") params.set("status", filter.status);
+    if (filter.status === "overdue" || filter.overdue) params.set("overdue", "true");
+    if (filter.type) params.set("type", filter.type);
+    if (filter.source) params.set("source", filter.source);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [filter, router, pathname]);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -235,6 +253,16 @@ function TicketsPageInner() {
           {Object.entries(TYPE_MAP).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
+        </select>
+
+        <select
+          value={filter.source}
+          onChange={(e) => { setFilter((f) => ({ ...f, source: e.target.value })); setPage(1); }}
+          className="px-4 py-2 rounded-xl border border-line bg-card text-sm text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20"
+        >
+          <option value="">全部来源</option>
+          <option value="manual">手工上报</option>
+          <option value="scan_auto">扫描触发</option>
         </select>
       </div>
 
