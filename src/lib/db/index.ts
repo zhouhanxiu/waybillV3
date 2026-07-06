@@ -1,6 +1,8 @@
 import postgres from "postgres";
 
 let sql: ReturnType<typeof postgres> | null = null;
+let dbInitialized = false;
+let dbInitPromise: Promise<void> | null = null;
 
 export function getDb() {
   const url = process.env.DATABASE_URL;
@@ -16,7 +18,16 @@ export function getDb() {
   return sql;
 }
 
+async function ensureDb() {
+  if (dbInitialized) return;
+  if (!dbInitPromise) {
+    dbInitPromise = initDb().then(() => { dbInitialized = true; });
+  }
+  await dbInitPromise;
+}
+
 export async function query<T = any>(sqlText: string, params?: any[]) {
+  await ensureDb();
   const db = getDb();
   return (await db.unsafe(sqlText, params)) as T[];
 }
