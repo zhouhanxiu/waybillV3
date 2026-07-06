@@ -95,22 +95,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 确保本地快照存在
-    let snapshotId = waybill_snapshot_id || "";
-    if (!snapshotId) {
-      const existing = await query(
-        "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
-        [external_code]
+    // 确保本地快照存在（前端可能传假 ID，始终按 external_code 查或建）
+    let snapshotId = "";
+    const snapRows = await query(
+      "SELECT id FROM waybill_snapshots WHERE external_code = $1 LIMIT 1",
+      [external_code]
+    );
+    if (snapRows.length > 0) {
+      snapshotId = snapRows[0].id;
+    } else {
+      snapshotId = uid("snap");
+      await query(
+        `INSERT INTO waybill_snapshots (id, external_code, synced_at) VALUES ($1,$2,NOW())`,
+        [snapshotId, external_code]
       );
-      if (existing.length > 0) {
-        snapshotId = existing[0].id;
-      } else {
-        snapshotId = uid("snap");
-        await query(
-          `INSERT INTO waybill_snapshots (id, external_code, synced_at) VALUES ($1,$2,NOW())`,
-          [snapshotId, external_code]
-        );
-      }
     }
 
     // 检查同类型未关闭工单

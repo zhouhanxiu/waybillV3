@@ -47,7 +47,6 @@ export default function ReportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          waybill_snapshot_id: `snapshot_${form.external_code}`,
           external_code: form.external_code,
           exception_type: form.exception_type,
           source: "manual",
