@@ -82,17 +82,18 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     // Demo 模式：无真实数据库时返回模拟数据
     if (process.env.NODE_ENV === "development" || isMockMode()) {
+      const { searchParams } = new URL(req.url);
+      const id = searchParams.get("id");
+      const status = searchParams.get("status");
+      const source = searchParams.get("source");
+      const type = searchParams.get("type");
+      const overdue = searchParams.get("overdue");
       const mockItems = getMockTickets();
       const items = id
         ? mockItems.filter(t => t.id === id)
         : mockItems;
       // 筛选
       let filtered = [...items];
-      const { searchParams } = new URL(req.url);
-      const status = searchParams.get("status");
-      const source = searchParams.get("source");
-      const type = searchParams.get("type");
-      const overdue = searchParams.get("overdue");
       if (status) {
         const statusList = status.split(",").map(s => s.trim());
         filtered = filtered.filter(t => statusList.includes(t.status));
