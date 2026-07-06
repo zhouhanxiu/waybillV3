@@ -203,8 +203,9 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at)`,
   ];
 
+  const db = getDb();
   for (const sqlText of statements) {
-    await query(sqlText);
+    await db.unsafe(sqlText);
   }
 
   // ──── 兼容迁移：为旧表补充缺失列 ──────────────────────────────────
@@ -236,7 +237,7 @@ export async function initDb() {
   for (const [table, statements] of Object.entries(migrations)) {
     for (const sqlText of statements) {
       try {
-        await query(sqlText);
+        await db.unsafe(sqlText);
       } catch { /* 忽略单个迁移错误 */ }
     }
   }
@@ -244,10 +245,10 @@ export async function initDb() {
   // 兼容迁移：为没有密码的旧用户设置默认密码
   try {
     const { hashPassword } = await import("../auth");
-    const rows = await query("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
+    const rows = await db.unsafe("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
     for (const r of rows as any[]) {
       const pwHash = await hashPassword("admin");
-      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
+      await db.unsafe("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
   } catch { /* 忽略迁移错误 */ }
 }
