@@ -3,7 +3,7 @@
  */
 import { uid } from "./utils";
 
-const V2_BASE_URL = (process.env.V2_API_BASE_URL || "https://20260704155001.vercel.app").trim();
+const V2_BASE_URL = (process.env.V2_API_BASE_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app").trim();
 const V2_API_KEY = process.env.V2_API_KEY || "v3-internal-key";
 const REQUEST_TIMEOUT_MS = parseInt(process.env.V2_REQUEST_TIMEOUT || "10000");
 const MAX_RETRIES = parseInt(process.env.V2_MAX_RETRIES || "2");
