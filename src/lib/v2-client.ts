@@ -33,6 +33,7 @@ async function logSync(params: {
   durationMs?: number;
   errorMessage?: string;
 }) {
+  try {
     // 日志记录改为异步、不阻塞主请求，避免日志写入拖慢响应
     queueMicrotask(async () => {
       try {
