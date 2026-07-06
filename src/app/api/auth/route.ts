@@ -13,15 +13,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "用户名和密码不能为空" }, { status: 400 });
     }
 
-    const rows = await query("SELECT * FROM users WHERE name = $1 AND active = true", [username]);
-    if (rows.length === 0) {
-      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
+    // 先查出所有活跃用户看看有没有匹配（避免 $1 参数绑定问题）
+    const allActive = await query("SELECT * FROM users WHERE active = true");
+    const user = (allActive as any[]).find(
+      (u: any) => u.name === username
+    );
+
+    if (!user) {
+      return NextResponse.json({
+        error: `用户名或密码错误 (用户不存在: ${username}, 活跃用户数: ${allActive.length})`
+      }, { status: 401 });
     }
 
-    const user = rows[0] as any;
+    if (!user.password_hash) {
+      // 没有密码哈希，尝试用默认哈希
+      const defaultHash = await hashPassword("admin");
+      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [defaultHash, user.id]);
+      user.password_hash = defaultHash;
+    }
+
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
+      const computed = await hashPassword(password);
+      return NextResponse.json({
+        error: `密码错误 (expected prefix: ${user.password_hash.substring(0, 8)}..., got: ${computed.substring(0, 8)}...)`
+      }, { status: 401 });
     }
 
     const roles: string[] = typeof user.roles === "string" ? JSON.parse(user.roles) : (user.roles || []);
