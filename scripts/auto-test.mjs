@@ -17,6 +17,8 @@
 
 import https from "node:https";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 
 const V2 = "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
 const V3 = "https://20260704155001-v3.vercel.app";
@@ -28,17 +30,85 @@ const args = process.argv.slice(2);
 const SKIP_TEST1 = args.includes("--skip-deploy");
 const SKIP_TEST2 = args.includes("--skip-v2");
 const SKIP_SEED = args.includes("--no-seed");
+const RETRY = args.includes("--retry");
+
+const RESULT_FILE = path.join(path.dirname(new URL(import.meta.url).pathname), "test-results.json");
+
+// ──── 重试模式：读取上次结果，标记已通过的测试 ──────────────────────────
+
+function loadPreviousResults() {
+  try {
+    if (fs.existsSync(RESULT_FILE)) {
+      const raw = fs.readFileSync(RESULT_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveResults(results, points) {
+  try {
+    const r = {};
+    for (const item of results) {
+      if (item.testNum !== undefined) {
+        if (!r[item.testNum]) r[item.testNum] = { passed: true, items: [] };
+        r[item.testNum].items.push({ label: item.label, passed: item.passed, detail: item.detail });
+        if (!item.passed) r[item.testNum].passed = false;
+      }
+    }
+    fs.writeFileSync(RESULT_FILE, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      points,
+      tests: r,
+    }, null, 2));
+  } catch { /* ignore */ }
+}
+
+const prevResults = RETRY ? loadPreviousResults() : null;
+const passedTests = new Set();
+if (prevResults && prevResults.tests) {
+  for (const [num, info] of Object.entries(prevResults.tests)) {
+    if (info.passed) passedTests.add(Number(num));
+  }
+  console.log(`\n🔁 重试模式：上次 ${Object.keys(prevResults.tests).length} 组测试`);
+  console.log(`  ✅ 已通过: ${[...passedTests].sort().join(", ") || "无"}`);
+  const failed = Object.keys(prevResults.tests).filter(k => !prevResults.tests[k].passed).map(Number);
+  console.log(`  ❌ 重跑: ${failed.length > 0 ? failed.sort().join(", ") : "无——全部通过！"}`);
+}
 
 // ──── 工具函数 ────────────────────────────────────────────────────────
 
 const results = [];
 let points = 0;
 
+/** 当前正在执行的 test 编号（1-8），用于重试模式判断 */
+let currentTestNum = 0;
+
+function shouldSkipTest(num) {
+  return RETRY && passedTests.has(num);
+}
+
+function addPoints(n) {
+  if (!RETRY || !passedTests.has(currentTestNum)) {
+    points += n;
+  }
+}
+
 function log(label, passed, detail = "") {
+  const skip = RETRY && passedTests.has(currentTestNum);
+
+  if (skip) {
+    const icon = "⏭️";
+    const line = `${icon} ${label} — 跳过 (上次已通过)`;
+    console.log(line);
+    results.push({ label, passed, detail, testNum: currentTestNum, skipped: true });
+    return false;
+  }
+
   const icon = passed ? "✅" : "❌";
   const line = `${icon} ${label}${detail ? ` — ${detail}` : ""}`;
   console.log(line);
-  results.push({ label, passed, detail });
+  results.push({ label, passed, detail, testNum: currentTestNum });
   if (passed) return true;
   return false;
 }
@@ -137,31 +207,32 @@ async function checkExecutionRecords() {
 // ──── 测试 1: 部署可达性 (10分) ──────────────────────────────────────
 
 async function test1() {
-  console.log("\n═══ 测试1: 部署可达性 ═══");
+  currentTestNum = 1;
+  console.log(`\n═══ 测试1: 部署可达性${shouldSkipTest(1) ? " [⏭️ 跳过]" : ""} ═══`);
 
   const v2Health = await fetchApi(`${V2}/api/health`);
-  if (log("V2 部署可达", v2Health.ok, `status=${v2Health.status}, ${v2Health.ms}ms`)) points += 2;
+  if (log("V2 部署可达", v2Health.ok, `status=${v2Health.status}, ${v2Health.ms}ms`)) addPoints(2);
   else { console.log(`  ⚠ V2 不可达, 后续测试可能失败: ${JSON.stringify(v2Health.body)}`); }
 
   const v3Monitor = await fetchApi(`${V3}/api/monitor`);
-  if (log("V3 部署可达", v3Monitor.ok, `status=${v3Monitor.status}, ${v3Monitor.ms}ms`)) points += 2;
+  if (log("V3 部署可达", v3Monitor.ok, `status=${v3Monitor.status}, ${v3Monitor.ms}ms`)) addPoints(2);
   else { console.log(`  ⚠ V3 不可达, 后续测试可能失败: ${JSON.stringify(v3Monitor.body)}`); }
 
   log("V2/V3 独立部署", 
     !V2.includes("-v3") && V3.includes("-v3"), 
     `V2: ${new URL(V2).hostname}, V3: ${new URL(V3).hostname}`);
-  points += 2;
+  addPoints(2);
 
   if (v2Health.ok && v2Health.body?.status === "ok") {
     log("V2 /api/health 正常", true);
-    points += 2;
+    addPoints(2);
   }
 
   if (v3Monitor.ok && typeof v3Monitor.body === "object") {
     log("V3 /api/monitor 正常 (含 v2_healthy)", 
       v3Monitor.body.hasOwnProperty("v2_healthy"), 
       `v2_healthy=${v3Monitor.body.v2_healthy}`);
-    points += 2;
+    addPoints(2);
   }
 
   return v2Health.ok && v3Monitor.ok;
@@ -170,12 +241,13 @@ async function test1() {
 // ──── 测试 2: V2 接口对接 (10分) ──────────────────────────────────────
 
 async function test2() {
-  console.log("\n═══ 测试2: V2 接口对接 ═══");
+  currentTestNum = 2;
+  console.log(`\n═══ 测试2: V2 接口对接${shouldSkipTest(2) ? " [⏭️ 跳过]" : ""} ═══`);
 
   // 鉴权测试
   const noAuth = await fetchApi(`${V2}/api/waybills/sync`, { method: "POST" });
   log("V2 接口鉴权 (无token→401)", noAuth.status === 401, `status=${noAuth.status}`);
-  points += 2;
+  addPoints(2);
 
   // 同步运单
   const syncRes = await fetchApi(`${V2}/api/waybills/sync`, {
@@ -185,7 +257,7 @@ async function test2() {
   });
   log("V2 运单同步", syncRes.ok, 
     `status=${syncRes.status}, items=${Array.isArray(syncRes.body) ? syncRes.body.length : JSON.stringify(syncRes.body).slice(0, 100)}`);
-  points += syncRes.ok ? 2 : 0;
+  addPoints(syncRes.ok ? 2 : 0);
 
   // SKU 校验
   const waybills = Array.isArray(syncRes.body) ? syncRes.body : [];
@@ -196,7 +268,7 @@ async function test2() {
       { headers: { Authorization: `Bearer ${INTERNAL_KEY}` } }
     );
     log("V2 SKU校验接口", skuCheck.ok || skuCheck.status !== 404, `status=${skuCheck.status}`);
-    points += 2;
+    addPoints(2);
 
     // 异常回写
     const notifyRes = await fetchApi(`${V2}/api/waybills/exception-status`, {
@@ -205,11 +277,11 @@ async function test2() {
       body: JSON.stringify({ external_code: wb.external_code, has_open_ticket: true }),
     });
     log("V2 异常回写接口", notifyRes.ok, `status=${notifyRes.status}`);
-    points += 2;
+    addPoints(2);
   }
 
   log("V2 接口文档完整 (系统间接口文档.md)", true);
-  points += 2;
+  addPoints(2);
 
   return waybills;
 }
@@ -217,7 +289,8 @@ async function test2() {
 // ──── 测试 3: 异常工单创建 + 真实校验 (10分) ──────────────────────────
 
 async function test3(waybills) {
-  console.log("\n═══ 测试3: 异常工单创建 + 真实校验 ═══");
+  currentTestNum = 3;
+  console.log(`\n═══ 测试3: 异常工单创建 + 真实校验${shouldSkipTest(3) ? " [⏭️ 跳过]" : ""} ═══`);
 
   if (waybills.length === 0) {
     log("创建工单前置条件", false, "无运单数据，跳过");
@@ -234,7 +307,7 @@ async function test3(waybills) {
     body: JSON.stringify({}),
   });
   log("缺少字段返回400", badReq.status === 400, `status=${badReq.status}`);
-  points += 2;
+  addPoints(2);
 
   // 不存在的运单→400
   const fakeReq = await fetchApi(`${V3}/api/tickets`, {
@@ -248,7 +321,7 @@ async function test3(waybills) {
   });
   log("不存在的运单被拦截", !fakeReq.ok, 
     `status=${fakeReq.status}: ${JSON.stringify(fakeReq.body).slice(0, 100)}`);
-  points += 2;
+  addPoints(2);
 
   // 创建工单 (小金额→一级审批)
   const ticketRes = await fetchApi(`${V3}/api/tickets`, {
@@ -271,7 +344,7 @@ async function test3(waybills) {
 
   const ticketId = ticketRes.body.id;
   log("创建异常工单", true, `id=${ticketId}, status=${ticketRes.body.status}`);
-  points += 2;
+  addPoints(2);
 
   // 去重检测 (同类型未关闭)
   const dupRes = await fetchApi(`${V3}/api/tickets`, {
@@ -289,7 +362,7 @@ async function test3(waybills) {
   log("同类型未关闭工单去重 (409)", 
     dupRes.status === 409 || !dupRes.ok, 
     `status=${dupRes.status}: ${JSON.stringify(dupRes.body).slice(0, 100)}`);
-  points += 2;
+  addPoints(2);
 
   // 不同异常类型可以创建
   const ticket2Res = await fetchApi(`${V3}/api/tickets`, {
@@ -306,7 +379,7 @@ async function test3(waybills) {
   });
   log("不同异常类型可创建", ticket2Res.ok, 
     `status=${ticket2Res.status}, id=${ticket2Res.body?.id}`);
-  points += 2;
+  addPoints(2);
 
   return { ticketId, ticket2Id: ticket2Res.body?.id, externalCode, wb };
 }
@@ -314,7 +387,8 @@ async function test3(waybills) {
 // ──── 测试 4: 审批权限 + 一级审批 + 拒绝重提 (15分) ──────────────────
 
 async function test4(ticketId, ticket2Id, externalCode) {
-  console.log("\n═══ 测试4: 审批权限 + 一级审批 + 拒绝重提 ═══");
+  currentTestNum = 4;
+  console.log(`\n═══ 测试4: 审批权限 + 一级审批 + 拒绝重提${shouldSkipTest(4) ? " [⏭️ 跳过]" : ""} ═══`);
 
   if (!ticketId) {
     log("审批测试前置条件", false, "无工单ID");
@@ -335,7 +409,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
   log("上报人不能审批自己 (403)", 
     selfApprove.status === 403, 
     `status=${selfApprove.status}: ${JSON.stringify(selfApprove.body)}`);
-  points += 2;
+  addPoints(2);
 
   // 4.2 一级审批通过（pending→level1）
   const approve1 = await fetchApi(`${V3}/api/tickets`, {
@@ -351,7 +425,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
 
   if (approve1.ok) {
     log("一级审批通过 → level1", true, `status=${approve1.body?.status}`);
-    points += 1;
+    addPoints(1);
   } else {
     log("一级审批通过", false, JSON.stringify(approve1.body));
   }
@@ -374,7 +448,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
     log("一级复审通过 → executing/done", 
       newStatus === "executing" || newStatus === "done", 
       `status=${newStatus}`);
-    points += 1;
+    addPoints(1);
   } else {
     log("一级复审通过", false, JSON.stringify(approve1b.body));
   }
@@ -387,7 +461,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
     log("审批后工单终态", 
       status === "done" || status === "executing", 
       `status=${status}`);
-    points += 2;
+    addPoints(2);
   }
 
   // 4.4 拒绝→重提
@@ -403,7 +477,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
     });
     if (rejectRes.ok) {
       log("拒绝 → pending (允许重提)", true, `status=${rejectRes.body?.status}`);
-      points += 2;
+      addPoints(2);
 
       // 检查 retry_count
       const t2Info = await fetchApi(`${V3}/api/tickets?id=${ticket2Id}`);
@@ -411,7 +485,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
         log("拒绝后retry_count递增", 
           t2Info.body.retry_count > 0, 
           `retry_count=${t2Info.body.retry_count}`);
-        points += 2;
+        addPoints(2);
       }
     } else {
       log("拒绝→重提", false, JSON.stringify(rejectRes.body));
@@ -431,7 +505,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
   log("并发冲突检测 (已终态工单→409)", 
     conflictRes.status === 409 || conflictRes.status === 400, 
     `status=${conflictRes.status}: ${JSON.stringify(conflictRes.body).slice(0, 100)}`);
-  points += 2;
+  addPoints(2);
 
   // 4.6 幂等性 (相同审批人重复审批)
   const dupApprove = await fetchApi(`${V3}/api/tickets`, {
@@ -449,7 +523,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
   log("幂等性: 重复审批不重复创建记录", 
     isDupHandled, 
     `status=${dupApprove.status}: ${JSON.stringify(dupApprove.body).slice(0, 100)}`);
-  points += 2;
+  addPoints(2);
 
   return approve1.ok;
 }
@@ -487,7 +561,7 @@ async function test5(externalCode) {
   log("高金额工单直接进二级审批", 
     highRes.body.status === "level2", 
     `amount=800, status=${highRes.body.status}`);
-  points += 2;
+  addPoints(2);
 
   // 一级审批人无法审批二级工单 (非同一层级)
   const l1Approve = await fetchApi(`${V3}/api/tickets`, {
@@ -504,7 +578,7 @@ async function test5(externalCode) {
   log("一级审批人无法越权审批二级工单", 
     !l1Approve.ok, 
     `status=${l1Approve.status}: ${JSON.stringify(l1Approve.body).slice(0, 100)}`);
-  points += 2;
+  addPoints(2);
 
   // 二级审批通过
   const l2Approve = await fetchApi(`${V3}/api/tickets`, {
@@ -520,7 +594,7 @@ async function test5(externalCode) {
 
   if (l2Approve.ok) {
     log("二级审批通过 → executing/done", true, `status=${l2Approve.body?.status}`);
-    points += 2;
+    addPoints(2);
   } else {
     log("二级审批通过", false, JSON.stringify(l2Approve.body));
   }
@@ -532,14 +606,15 @@ async function test5(externalCode) {
     log("高金额工单终态 (done)", 
       highInfo.body.status === "done", 
       `status=${highInfo.body.status}`);
-    points += 2;
+    addPoints(2);
   }
 }
 
 // ──── 测试 6: 扫描品控链路 (12分) ─────────────────────────────────────
 
 async function test6(waybills) {
-  console.log("\n═══ 测试6: 扫描品控链路 ═══");
+  currentTestNum = 6;
+  console.log(`\n═══ 测试6: 扫描品控链路${shouldSkipTest(6) ? " [⏭️ 跳过]" : ""} ═══`);
 
   if (waybills.length === 0) {
     log("扫描前置条件", false, "无运单数据");
@@ -586,7 +661,7 @@ async function test6(waybills) {
 
   if (scanPass.ok && scanPass.body?.result === "pass") {
     log("扫描通过 (result=pass)", true, `batch_status=released`);
-    points += 2;
+    addPoints(2);
   } else {
     log("扫描通过", false, `status=${scanPass.status}: ${JSON.stringify(scanPass.body).slice(0, 150)}`);
   }
@@ -612,7 +687,7 @@ async function test6(waybills) {
     scanId = scanFail.body.id;
     log("扫描不通过 → 品控暂扣+创建工单", true, 
       `ticket_id=${scanFail.body.ticket_id}, subtype=${scanFail.body.exception_subtype}`);
-    points += 2;
+    addPoints(2);
 
     // 6.3 品控主管快速放行
     const fastRelease = await fetchApi(`${V3}/api/scan`, {
@@ -626,9 +701,9 @@ async function test6(waybills) {
 
     if (fastRelease.ok) {
       log("品控主管快速放行", true, `success=${fastRelease.body?.success}`);
-      points += 2;
+      addPoints(2);
       log("放行后关闭关联工单+留审批记录", true);
-      points += 1;
+      addPoints(1);
     } else {
       log("品控主管快速放行", false, `status=${fastRelease.status}: ${JSON.stringify(fastRelease.body).slice(0, 100)}`);
 
@@ -639,7 +714,7 @@ async function test6(waybills) {
       });
       if (adminRelease.ok) {
         log("管理员快速放行", true);
-        points += 3;
+        addPoints(3);
       }
     }
 
@@ -664,7 +739,7 @@ async function test6(waybills) {
     log("扫描幂等性: 重复扫描不重复创建工单", 
       isDup, 
       `status=${scanDup.status}: ${JSON.stringify(scanDup.body).slice(0, 150)}`);
-    points += 2;
+    addPoints(2);
 
     // 6.5 非品控主管不能快速放行 → 403
     const noPerm = await fetchApi(`${V3}/api/scan`, {
@@ -678,7 +753,7 @@ async function test6(waybills) {
     log("快速放行权限隔离 (普通操作员→403)", 
       noPerm.status === 403, 
       `status=${noPerm.status}: ${JSON.stringify(noPerm.body).slice(0, 100)}`);
-    points += 2;
+    addPoints(2);
 
     // 6.6 已放行的不能再次放行
     const doubleRelease = await fetchApi(`${V3}/api/scan`, {
@@ -692,7 +767,7 @@ async function test6(waybills) {
     log("已放行批次不可再次放行", 
       !doubleRelease.ok, 
       `status=${doubleRelease.status}: ${JSON.stringify(doubleRelease.body).slice(0, 100)}`);
-    points += 1;
+    addPoints(1);
   } else {
     log("扫描不通过→品控暂扣", false, `status=${scanFail.status}: ${JSON.stringify(scanFail.body).slice(0, 150)}`);
   }
@@ -709,13 +784,13 @@ async function test7(waybills) {
     log("监控面板 v2_healthy 状态", 
       typeof monitor.body.v2_healthy === "boolean", 
       `v2_healthy=${monitor.body.v2_healthy}`);
-    points += 2;
+    addPoints(2);
 
     if (monitor.body.recent_logs && Array.isArray(monitor.body.recent_logs)) {
       log("sync_logs 存在 (跨系统调用日志)", 
         monitor.body.recent_logs.length >= 0, 
         `count=${monitor.body.recent_logs.length}`);
-      points += 2;
+      addPoints(2);
 
       // 检查是否有 request_id
       if (monitor.body.recent_logs.length > 0) {
@@ -723,12 +798,12 @@ async function test7(waybills) {
         log("sync_logs 含 request_id", 
           !!firstLog.request_id, 
           `request_id=${firstLog.request_id}`);
-        points += 2;
+        addPoints(2);
 
         log("sync_logs 含耗时/状态码", 
           firstLog.duration_ms !== undefined && firstLog.status_code !== undefined,
           `duration=${firstLog.duration_ms}ms, status=${firstLog.status_code}`);
-        points += 2;
+        addPoints(2);
       }
     }
   }
@@ -738,7 +813,7 @@ async function test7(waybills) {
   if (dashboard.ok && dashboard.body) {
     log("Dashboard 统计接口", true, 
       `total=${dashboard.body.total_tickets}, pending=${dashboard.body.pending_tickets}, completed=${dashboard.body.completed_today}`);
-    points += 2;
+    addPoints(2);
   } else {
     log("Dashboard 统计接口", false, `status=${dashboard.status}`);
   }
@@ -747,7 +822,8 @@ async function test7(waybills) {
 // ──── 测试 8: 特定运单 WD-20260706-0009 的验证 ─────────────────────────
 
 async function testSpecificWaybill() {
-  console.log("\n═══ 测试8: 特定运单验证 WD-20260706-0009 ═══");
+  currentTestNum = 8;
+  console.log(`\n═══ 测试8: 特定运单验证 WD-20260706-0009${shouldSkipTest(8) ? " [⏭️ 跳过]" : ""} ═══`);
 
   const targetExternalCode = "WD-20260706-0009";
   const targetSkuCode = "04050198";
@@ -761,7 +837,7 @@ async function testSpecificWaybill() {
   log("V2 运单存在", 
     v2Check.ok && (Array.isArray(v2Check.body) ? v2Check.body.length > 0 : v2Check.body), 
     `status=${v2Check.status}`);
-  points += 1;
+  addPoints(1);
 
   // 8.2 SKU 校验
   const skuCheck = await fetchApi(
@@ -771,7 +847,7 @@ async function testSpecificWaybill() {
   log(`V2 SKU校验: ${targetSkuCode}`, 
     skuCheck.ok && skuCheck.body?.valid === true, 
     `valid=${skuCheck.body?.valid}`);
-  points += 1;
+  addPoints(1);
 
   // 8.3 为这个运单创建异常工单
   const ticketRes = await fetchApi(`${V3}/api/tickets`, {
@@ -790,7 +866,7 @@ async function testSpecificWaybill() {
   if (ticketRes.ok && ticketRes.body?.id) {
     const specificId = ticketRes.body.id;
     log("创建特定运单工单", true, `id=${specificId}, status=${ticketRes.body.status}`);
-    points += 1;
+    addPoints(1);
 
     // 金额500触发二级审批，需用 level2 审批人
     const approve = await fetchApi(`${V3}/api/tickets`, {
@@ -806,7 +882,7 @@ async function testSpecificWaybill() {
 
     if (approve.ok) {
       log("特定运单审批通过 → 联动", true, `status=${approve.body?.status}`);
-      points += 1;
+      addPoints(1);
     } else {
       log("特定运单审批", false, JSON.stringify(approve.body));
     }
@@ -818,7 +894,7 @@ async function testSpecificWaybill() {
       log("特定运单工单终态 (done)", 
         finalCheck.body.status === "done", 
         `status=${finalCheck.body.status}`);
-      points += 1;
+      addPoints(1);
     }
   } else {
     log("创建特定运单工单", false, `status=${ticketRes.status}: ${JSON.stringify(ticketRes.body).slice(0, 150)}`);
@@ -843,7 +919,7 @@ async function testSpecificWaybill() {
     log(`扫描品控: ${targetSkuName} (10→3)`, 
       scanRes.body?.result === "fail", 
       `result=${scanRes.body?.result}, subtype=${scanRes.body?.exception_subtype}`);
-    points += 1;
+    addPoints(1);
 
     // 快速放行
     if (scanRes.body?.id) {
@@ -858,7 +934,7 @@ async function testSpecificWaybill() {
       log("特定SKU快速放行", 
         release.ok, 
         `success=${release.body?.success}`);
-      points += 1;
+      addPoints(1);
     }
   } else {
     log("扫描品控", false, `status=${scanRes.status}: ${JSON.stringify(scanRes.body).slice(0, 150)}`);
@@ -872,7 +948,7 @@ async function main() {
   console.log("  V3 运单全流程管理系统 — 自动化端到端测试");
   console.log(`  V2: ${V2}`);
   console.log(`  V3: ${V3}`);
-  console.log(`  参数: --skip-deploy=${SKIP_TEST1} --skip-v2=${SKIP_TEST2} --no-seed=${SKIP_SEED}`);
+  console.log(`  参数: --skip-deploy=${SKIP_TEST1} --skip-v2=${SKIP_TEST2} --no-seed=${SKIP_SEED} --retry=${RETRY}`);
   console.log(`  时间: ${new Date().toISOString()}`);
   console.log("═══════════════════════════════════════════");
 
@@ -936,20 +1012,25 @@ async function main() {
     console.log("  ✅ 执行记录已存在，跳过生成");
   }
 
+  // 保存结果供下次 --retry 使用
+  saveResults(results, points);
+
   // 输出汇总
   printSummary(startTime);
 }
 
 function printSummary(startTime) {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  const passCount = results.filter(r => r.passed).length;
-  const failCount = results.filter(r => !r.passed).length;
+  const passCount = results.filter(r => r.passed && !r.skipped).length;
+  const failCount = results.filter(r => !r.passed && !r.skipped).length;
+  const skipCount = results.filter(r => r.skipped).length;
 
   console.log("\n═══════════════════════════════════════════");
   console.log("              测试结果汇总");
   console.log("═══════════════════════════════════════════");
   console.log(`  ✅ 通过: ${passCount}/${results.length}`);
   console.log(`  ❌ 失败: ${failCount}/${results.length}`);
+  if (skipCount > 0) console.log(`  ⏭️  跳过: ${skipCount} (上次已通过)`);
   console.log(`  📊 预计得分: ${points}/100`);
   console.log(`  ⏱  耗时: ${elapsed}s`);
 
@@ -959,7 +1040,7 @@ function printSummary(startTime) {
                 points >= 60 ? "初级工程师" : "未通过";
   console.log(`  🏆 评级: ${grade}`);
 
-  const failures = results.filter(r => !r.passed);
+  const failures = results.filter(r => !r.passed && !r.skipped);
   if (failures.length > 0) {
     console.log("\n  失败项列表:");
     failures.forEach((f, i) => {
