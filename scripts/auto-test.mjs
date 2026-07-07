@@ -124,8 +124,10 @@ async function seedExecutionRecords() {
 }
 
 async function checkExecutionRecords() {
-  const comp = await fetchApi(`${V3}/api/executions?type=compensation&pageSize=1`);
-  const inv = await fetchApi(`${V3}/api/executions?type=inventory&pageSize=1`);
+  const headers: any = {};
+  if (adminCookie) headers.Cookie = adminCookie;
+  const comp = await fetchApi(`${V3}/api/executions?type=compensation&pageSize=1`, { headers });
+  const inv = await fetchApi(`${V3}/api/executions?type=inventory&pageSize=1`, { headers });
   return {
     compensation: comp.body?.items?.length || 0,
     inventory: inv.body?.items?.length || 0,
@@ -355,12 +357,13 @@ async function test4(ticketId, ticket2Id, externalCode) {
   }
 
   // 4.2b 一级复审（level1→executing→done，触发赔付/库存联动）
+  // 注意：必须用不同审批人，否则幂等性检查会拦截
   const approve1b = await fetchApi(`${V3}/api/tickets`, {
     method: "PUT",
     body: JSON.stringify({
       id: ticketId,
       action: "approve",
-      approver: "approver_level1_01",
+      approver: "approver_level1_02",
       level: 1,
       opinion: "一级复审通过-触发执行联动",
     }),
@@ -789,15 +792,15 @@ async function testSpecificWaybill() {
     log("创建特定运单工单", true, `id=${specificId}, status=${ticketRes.body.status}`);
     points += 1;
 
-    // 一级审批通过
+    // 金额500触发二级审批，需用 level2 审批人
     const approve = await fetchApi(`${V3}/api/tickets`, {
       method: "PUT",
       body: JSON.stringify({
         id: specificId,
         action: "approve",
-        approver: "approver_level1_01",
-        level: 1,
-        opinion: "特定运单审批通过",
+        approver: "approver_level2_01",
+        level: 2,
+        opinion: "特定运单二级审批通过",
       }),
     });
 

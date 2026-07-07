@@ -122,6 +122,7 @@ async function cleanupOpenTickets() {
 const ROLES = {
   admin: "admin",
   level1_approver: "approver_level1_01",
+  level1_approver2: "approver_level1_02",
   level2_approver: "approver_level2_01",
   qc_supervisor: "qc_supervisor",
   operator: "operator_01",
@@ -363,7 +364,7 @@ export default function TestRunnerPage() {
 
       const approve1b = await v3Self("/api/tickets", {
         method: "PUT",
-        body: JSON.stringify({ action: "approve", id: ticketId, approver: ROLES.level1_approver, level: 1, opinion: "一级复审通过-触发执行联动" }),
+        body: JSON.stringify({ action: "approve", id: ticketId, approver: ROLES.level1_approver2, level: 1, opinion: "一级复审通过-触发执行联动" }),
       });
       t3("一级复审通过→done", approve1b.ok && ["done", "executing"].includes(approve1b.body?.status), `status=${approve1b.body?.status}`);
 
