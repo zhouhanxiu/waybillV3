@@ -637,9 +637,26 @@ export default function TestRunnerPage() {
       }
 
       if (waybillsData.length > 0) {
+        // 清洗数据格式，确保字段名与快照 API 一致（兼容 V2 的驼峰命名）
+        const cleanWaybills = waybillsData.map((wb: any) => ({
+          id: wb.id || `snap_${wb.external_code || wb.externalCode || Date.now()}`,
+          external_code: wb.external_code || wb.externalCode,
+          store_name: wb.store_name || wb.storeName || "未知",
+          receiver_name: wb.receiver_name || wb.receiverName || null,
+          receiver_phone: wb.receiver_phone || wb.receiverPhone || null,
+          receiver_address: wb.receiver_address || wb.receiverAddress || null,
+          amount: wb.amount || 0,
+          items: (wb.items || []).map((item: any) => ({
+            id: item.id || `item_${item.sku_code || item.skuCode}`,
+            sku_code: item.sku_code || item.skuCode || "",
+            sku_name: item.sku_name || item.skuName || "",
+            quantity: item.quantity || 0,
+            spec: item.spec || null,
+          })),
+        }));
         const snapWrite = await v3Self("/api/waybills/snapshot", {
           method: "POST",
-          body: JSON.stringify({ waybills: waybillsData }),
+          body: JSON.stringify({ waybills: cleanWaybills }),
         });
         t5("运单快照写入", snapWrite.ok || snapWrite.status === 200,
           `upserted=${snapWrite.body?.upserted ?? "?"} items=${snapWrite.body?.items ?? "?"}`);

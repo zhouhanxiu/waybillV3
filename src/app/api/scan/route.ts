@@ -13,9 +13,12 @@ function isMockMode() {
 
 // POST /api/scan — 执行扫描
 export async function POST(req: NextRequest) {
+  // 提前解析 body，使 catch 块也能获取扫描参数
+  let body: any;
+  try { body = await req.json(); } catch { body = {}; }
+  const { external_code, sku_code, sku_name, operator, expected_qty, actual_qty, damage_level, spec_match } = body;
+
   try {
-    const body = await req.json();
-    const { external_code, sku_code, sku_name, operator, expected_qty, actual_qty, damage_level, spec_match } = body;
 
     if (!external_code || !sku_code || !operator) {
       return NextResponse.json({ error: "缺少必要字段", status: 400, result: null }, { status: 400 });
@@ -169,10 +172,15 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     // Demo/mock 模式降级
     if (process.env.NODE_ENV === "development" || isMockMode()) {
+      const qtyOk = Math.abs((actual_qty || expected_qty || 0) - (expected_qty || 0)) === 0;
+      const noDamage = (damage_level || 0) === 0;
+      const specOk = spec_match !== false;
+      const scanPassed = qtyOk && noDamage && specOk;
+
       return NextResponse.json({
-        result: "fail",
-        message: "演示模式：品控检测已模拟",
-        ticket_id: uid("ticket"),
+        result: scanPassed ? "pass" : "fail",
+        message: scanPassed ? "品控检测通过，批次已放行（Mock模式）" : "演示模式：品控检测已模拟异常",
+        ticket_id: scanPassed ? undefined : uid("ticket"),
       });
     }
     return NextResponse.json({ error: err.message, result: null }, { status: 500 });

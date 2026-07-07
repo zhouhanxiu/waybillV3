@@ -284,6 +284,15 @@ export async function PUT(req: NextRequest) {
 
     // 并发冲突检测：乐观锁（基于状态）
     if (action === "approve" || action === "reject") {
+      // 工单已处于终态，直接返回当前状态（幂等）
+      if (["done", "closed"].includes(ticket.status) && action === "approve") {
+        return NextResponse.json({
+          id,
+          status: ticket.status,
+          message: "工单已处理完成",
+          already_completed: true,
+        });
+      }
       if (!["pending", "level1", "level2"].includes(ticket.status)) {
         return NextResponse.json(
           { error: `该工单已被处理，当前状态: ${ticket.status}，请刷新` },
