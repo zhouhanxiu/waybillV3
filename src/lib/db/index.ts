@@ -230,14 +230,22 @@ export async function initDb() {
     }
   }
 
-  // 兼容迁移：为没有密码的旧用户设置默认密码
+  // 兼容迁移：为没有密码的旧用户设置默认密码，admin 用 "admin"，其他用 "123456"
   try {
     const { hashPassword } = await import("../auth");
     const rows = await query("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
     for (const r of rows as any[]) {
-      const pwHash = await hashPassword("admin");
+      const pw = r.name === "admin" ? "admin" : "123456";
+      const pwHash = await hashPassword(pw);
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
+  } catch { /* 忽略迁移错误 */ }
+
+  // 强制重置所有非 admin 用户的密码为 123456（幂等迁移）
+  try {
+    const { hashPassword } = await import("../auth");
+    const pwHash123 = await hashPassword("123456");
+    await query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE name != 'admin' AND password_hash != $1", [pwHash123]);
   } catch { /* 忽略迁移错误 */ }
 
   // 自动补齐默认种子数据（用户、规则等）

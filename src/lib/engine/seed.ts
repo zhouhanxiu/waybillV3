@@ -11,11 +11,11 @@ export async function seedDefaults() {
   // ──── 默认用户 ────────────────────────────────────────────────────
   const defaultUsers = [
     { name: "admin", password: "admin", roles: ["admin"] },
-    { name: "qc_supervisor", password: "qc123", roles: ["qc_supervisor"] },
-    { name: "approver_level1_01", password: "app123", roles: ["level1_approver"] },
-    { name: "approver_level2_01", password: "app123", roles: ["level2_approver"] },
-    { name: "reporter_01", password: "rep123", roles: ["reporter"] },
-    { name: "operator_01", password: "op123", roles: ["operator"] },
+    { name: "qc_supervisor", password: "123456", roles: ["qc_supervisor"] },
+    { name: "approver_level1_01", password: "123456", roles: ["level1_approver"] },
+    { name: "approver_level2_01", password: "123456", roles: ["level2_approver"] },
+    { name: "reporter_01", password: "123456", roles: ["reporter"] },
+    { name: "operator_01", password: "123456", roles: ["operator"] },
   ];
 
   for (const u of defaultUsers) {
