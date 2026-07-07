@@ -10,9 +10,10 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 5,
-      idle_timeout: 10,
+      max: 3,               // serverless 环境降低连接数，防止 Neon 连接池耗尽
+      idle_timeout: 5,      // 5s 空闲即释放
       connect_timeout: 10,
+      max_lifetime: 25,     // 25s 后强制回收连接，匹配 Vercel 函数生命周期
     });
   }
   return sql;
@@ -256,22 +257,15 @@ async function _initDbInternal() {
     }
   }
 
-  // 兼容迁移：为没有密码的旧用户设置默认密码，admin 用 "admin"，其他用 "123456"
+  // 兼容迁移：为没有密码的旧用户设置默认密码（仅首次，有密码则跳过）
   try {
     const { hashPassword } = await import("../auth");
-    const rows = await dbRaw("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
+    const rows = await dbRaw("SELECT id, name FROM users WHERE password_hash = '' OR password_hash IS NULL");
     for (const r of rows as any[]) {
       const pw = r.name === "admin" ? "admin" : "123456";
       const pwHash = await hashPassword(pw);
       await dbRaw("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
-  } catch { /* 忽略迁移错误 */ }
-
-  // 强制重置所有非 admin 用户的密码为 123456（幂等迁移）
-  try {
-    const { hashPassword } = await import("../auth");
-    const pwHash123 = await hashPassword("123456");
-    await dbRaw("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE name != 'admin' AND password_hash != $1", [pwHash123]);
   } catch { /* 忽略迁移错误 */ }
 
   // 自动补齐默认种子数据（用户、规则等）
