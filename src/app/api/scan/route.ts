@@ -21,35 +21,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 校验运单和 SKU — 通过 V2 HTTP API 实时校验
-    try {
-      const { verifySkuBelongsToWaybill } = await import("@/lib/v2-client");
-
-      const check = await verifySkuBelongsToWaybill(external_code, sku_code);
-      if (!check.valid) {
-        return NextResponse.json(
-          { error: `运单 ${external_code} 不存在或 SKU ${sku_code} 不属于该运单` },
-          { status: 400 }
-        );
-      }
-    } catch (err: any) {
-      if (process.env.NODE_ENV === "development" || isMockMode()) {
-        return NextResponse.json({
-          id: uid("scan"),
-          result: "pass",
-          message: "演示模式：扫描检测通过（未配置真实数据库，数据未持久化）",
-        });
-      }
-      return NextResponse.json({ error: `V2 运单校验失败: ${err.message}` }, { status: 500 });
-    }
-
-    // 确保本地快照存在（统一入口：校验 V2 + 快照）
+    // 确保运单快照存在，获取 waybill 信息（含 items）
     const { validateWaybillInV2 } = await import("@/lib/v2-client");
     const vResult = await validateWaybillInV2(external_code);
     if (!vResult.valid) {
-      return NextResponse.json({ error: vResult.reason }, { status: 500 });
+      return NextResponse.json({ error: vResult.reason }, { status: 400 });
     }
     const waybillId = vResult.snapshotId;
+
+    // SKU 校验 — 仅本地检查（validateWaybillInV2 已确保快照和 items 完整）
+    if (sku_code && vResult.waybill) {
+      const hasSku = (vResult.waybill.items || []).some((item: any) => item.sku_code === sku_code);
+      if (!hasSku) {
+        return NextResponse.json(
+          { error: `SKU ${sku_code} 不属于运单 ${external_code}` },
+          { status: 400 }
+        );
+      }
+    }
 
     // 检查是否已有未关闭的品控工单（幂等性）
     const existingTickets = await query(

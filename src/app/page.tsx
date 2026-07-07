@@ -111,7 +111,7 @@ export default function DashboardPage() {
       icon: CheckCircle2,
       color: "text-success",
       bg: "bg-jingtian-soft",
-      href: "/tickets?status=done,closed",
+      href: "/tickets?status=done,closed&updated_from=today",
     },
   ];
 

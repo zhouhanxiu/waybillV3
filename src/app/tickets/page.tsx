@@ -99,6 +99,8 @@ function TicketsPageInner() {
   const initialOverdue = searchParams.get("overdue") === "true";
   const initialType = searchParams.get("type") || "";
   const initialSource = searchParams.get("source") || "";
+  const initialUpdatedFrom = searchParams.get("updated_from") || "";
+  const initialUpdatedTo = searchParams.get("updated_to") || "";
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
@@ -110,6 +112,8 @@ function TicketsPageInner() {
     type: initialType,
     overdue: initialOverdue,
     source: initialSource,
+    updatedFrom: initialUpdatedFrom,
+    updatedTo: initialUpdatedTo,
   });
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ ticket: Ticket; approvals: ApprovalRecord[] } | null>(null);
@@ -128,6 +132,8 @@ function TicketsPageInner() {
       if (filter.status && filter.status !== "overdue") params.set("status", filter.status);
       if (filter.type) params.set("type", filter.type);
       if (filter.source) params.set("source", filter.source);
+      if (filter.updatedFrom) params.set("updated_from", filter.updatedFrom);
+      if (filter.updatedTo) params.set("updated_to", filter.updatedTo);
       if (filter.status === "overdue" || filter.overdue) params.set("overdue", "true");
 
       const res = await fetch(`/api/tickets?${params}`, { signal });
@@ -151,6 +157,8 @@ function TicketsPageInner() {
     if (filter.status === "overdue" || filter.overdue) params.set("overdue", "true");
     if (filter.type) params.set("type", filter.type);
     if (filter.source) params.set("source", filter.source);
+    if (filter.updatedFrom) params.set("updated_from", filter.updatedFrom);
+    if (filter.updatedTo) params.set("updated_to", filter.updatedTo);
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [filter, router, pathname]);

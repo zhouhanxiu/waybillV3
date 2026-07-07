@@ -55,8 +55,27 @@ export async function GET(req: NextRequest) {
     }
 
     if (overdue === "true") {
-      paramIdx++;
       sql += ` AND due_at IS NOT NULL AND due_at < NOW() AND status NOT IN ('done','closed')`;
+    }
+
+    const updatedFrom = searchParams.get("updated_from");
+    const updatedTo = searchParams.get("updated_to");
+
+    if (updatedFrom === "today") {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      paramIdx++;
+      sql += ` AND updated_at >= $${paramIdx}`;
+      params.push(todayStart.toISOString());
+    } else if (updatedFrom) {
+      paramIdx++;
+      sql += ` AND updated_at >= $${paramIdx}`;
+      params.push(new Date(updatedFrom).toISOString());
+    }
+    if (updatedTo) {
+      paramIdx++;
+      sql += ` AND updated_at <= $${paramIdx}`;
+      params.push(new Date(updatedTo).toISOString());
     }
 
     // 分页
