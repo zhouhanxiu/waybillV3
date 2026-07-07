@@ -60,32 +60,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 检查是否已有未关闭的品控工单（幂等性）
-    const existingTickets = await query(
-      `SELECT t.id FROM exception_tickets t
-       JOIN scan_records s ON s.ticket_id = t.id
-       WHERE s.external_code = $1 AND s.sku_code = $2
-       AND t.source = 'scan_auto' AND t.status NOT IN ('done','closed')`,
-      [external_code, sku_code]
-    );
-
-    if (existingTickets.length > 0) {
-      // 已存在未关闭工单，只追加扫描记录
-      const scanId = uid("scan");
-      await query(
-        `INSERT INTO scan_records (id, waybill_snapshot_id, external_code, sku_code, sku_name, operator, qc_result, batch_status, ticket_id)
-         VALUES ($1,$2,$3,$4,$5,$6,'fail','qc_hold',$7)`,
-        [scanId, waybillId, external_code, sku_code, sku_name || sku_code, operator, existingTickets[0].id]
-      );
-
-      return NextResponse.json({
-        id: scanId,
-        result: "fail",
-        message: `该批次已存在未关闭品控工单 (${existingTickets[0].id})，已追加扫描记录`,
-        existing_ticket: existingTickets[0].id,
-      });
-    }
-
     // 加载品控规则（只取必要字段，减少内存和JSON.parse开销）
     const qcRules = await query(
       `SELECT id, exception_subtype, severity, approval_level,
@@ -96,8 +70,7 @@ export async function POST(req: NextRequest) {
        LIMIT 100`
     );
 
-
-    // 执行品控检测
+    // **先执行品控检测** — 如果通过，直接放行，不受旧工单影响
     const qcResult = evaluateQcResult(
       expected_qty || 0,
       actual_qty || expected_qty || 0,
@@ -114,7 +87,7 @@ export async function POST(req: NextRequest) {
     const scanId = uid("scan");
 
     if (qcResult.passed) {
-      // 通过
+      // 通过 — 直接放行，不受历史工单影响
       await query(
         `INSERT INTO scan_records (id, waybill_snapshot_id, external_code, sku_code, sku_name, operator, qc_result, batch_status)
          VALUES ($1,$2,$3,$4,$5,$6,'pass','released')`,
@@ -125,6 +98,31 @@ export async function POST(req: NextRequest) {
         id: scanId,
         result: "pass",
         message: "品控检测通过，批次已放行",
+      });
+    }
+
+    // 品控不通过 — 检查是否已有未关闭的品控工单（幂等性）
+    const existingTickets = await query(
+      `SELECT t.id FROM exception_tickets t
+       JOIN scan_records s ON s.ticket_id = t.id
+       WHERE s.external_code = $1 AND s.sku_code = $2
+       AND t.source = 'scan_auto' AND t.status NOT IN ('done','closed')`,
+      [external_code, sku_code]
+    );
+
+    if (existingTickets.length > 0) {
+      // 已存在未关闭工单，只追加扫描记录
+      await query(
+        `INSERT INTO scan_records (id, waybill_snapshot_id, external_code, sku_code, sku_name, operator, qc_result, batch_status, ticket_id)
+         VALUES ($1,$2,$3,$4,$5,$6,'fail','qc_hold',$7)`,
+        [scanId, waybillId, external_code, sku_code, sku_name || sku_code, operator, existingTickets[0].id]
+      );
+
+      return NextResponse.json({
+        id: scanId,
+        result: "fail",
+        message: `该批次已存在未关闭品控工单 (${existingTickets[0].id})，已追加扫描记录`,
+        existing_ticket: existingTickets[0].id,
       });
     }
 

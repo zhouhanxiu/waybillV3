@@ -84,35 +84,43 @@ async function v3Self(path: string, opts: RequestInit = {}) {
 }
 
 async function cleanupOpenTickets() {
-  // 先获取所有工单
+  // 优先使用 debug 端点直接清理（最可靠）
+  try {
+    const cleanRes = await v3Self("/api/debug?action=cleanup_tickets");
+    if (cleanRes.ok && cleanRes.body?.ok) {
+      console.log(`[cleanup] debug 清理完成: ${cleanRes.body.cleaned || "?"} 条`);
+      return;
+    }
+  } catch { /* fallback */ }
+
+  // 兜底：手动关闭遗留工单
   const list = await v3Self("/api/tickets?pageSize=500");
   const items = list.body?.items || [];
   const openTickets = items.filter((t: any) => !["done", "closed"].includes(t.status));
 
-  // 对于 executing 状态的，先 approve 让它进入 done
-  for (const ticket of openTickets.filter((t: any) => t.status === "executing")) {
-    await v3Self("/api/tickets", {
-      method: "PUT",
-      body: JSON.stringify({ action: "approve", id: ticket.id, approver: ROLES.level2_approver, level: 2, opinion: "测试清理-完成" }),
-    });
-  }
-
-  // 对于其他未关闭工单，反复 reject 直到 closed
-  for (const ticket of openTickets.filter((t: any) => t.status !== "executing")) {
-    for (let i = 0; i < 5; i++) {
-      const res = await v3Self("/api/tickets", {
+  for (const ticket of openTickets) {
+    // pending/level1 → 先 approve → executing → 再 approve → done
+    if (["pending", "level1"].includes(ticket.status)) {
+      await v3Self("/api/tickets", {
         method: "PUT",
-        body: JSON.stringify({
-          action: "reject",
-          id: ticket.id,
-          approver: ticket.status === "level2" ? ROLES.level2_approver : ROLES.level1_approver,
-          opinion: "测试清理",
-        }),
+        body: JSON.stringify({ action: "approve", id: ticket.id, approver: ROLES.level1_approver, level: 1, opinion: "测试清理-一级" }),
       });
-      // 如果已经 closed/done，停止
-      const checkRes = await v3Self(`/api/tickets?id=${ticket.id}`);
-      const st = checkRes.body?.status || "";
-      if (["done", "closed"].includes(st)) break;
+      // 低金额快速通道可能直接→done，再查一下
+      const check = await v3Self(`/api/tickets?id=${ticket.id}`);
+      if (["done", "closed"].includes(check.body?.status || "")) continue;
+
+      await v3Self("/api/tickets", {
+        method: "PUT",
+        body: JSON.stringify({ action: "approve", id: ticket.id, approver: ROLES.level1_approver2, level: 1, opinion: "测试清理-二级快速" }),
+      });
+    }
+
+    // level2/executing → approve → done
+    if (["level2", "executing"].includes(ticket.status)) {
+      await v3Self("/api/tickets", {
+        method: "PUT",
+        body: JSON.stringify({ action: "approve", id: ticket.id, approver: ROLES.level2_approver, level: 2, opinion: "测试清理-完成" }),
+      });
     }
   }
 }
@@ -200,7 +208,7 @@ export default function TestRunnerPage() {
 
     // 以 admin 登录，方便后续生成执行记录测试数据
     setCurrentLine("管理员登录...");
-    const loginRes = await v3Self("/api/auth/login", {
+    const loginRes = await v3Self("/api/auth", {
       method: "POST",
       body: JSON.stringify({ username: "admin", password: "admin" }),
     });
