@@ -1,6 +1,8 @@
 import postgres from "postgres";
 
 let sql: ReturnType<typeof postgres> | null = null;
+let initialized = false;
+let initializing: Promise<void> | null = null;
 
 export function getDb() {
   const url = process.env.DATABASE_URL;
@@ -17,6 +19,18 @@ export function getDb() {
 }
 
 export async function query<T = any>(sqlText: string, params?: any[]) {
+  // 首次查询时自动初始化数据库（幂等，表已存在则跳过）
+  if (!initialized && !initializing) {
+    initializing = initDb().then(() => {
+      initialized = true;
+      initializing = null;
+    }).catch((err) => {
+      initializing = null;
+      throw err;
+    });
+  }
+  if (initializing) await initializing;
+
   const db = getDb();
   return (await db.unsafe(sqlText, params)) as T[];
 }

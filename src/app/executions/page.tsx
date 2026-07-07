@@ -22,17 +22,32 @@ export default function ExecutionsPage() {
 
   const load = async () => {
     setLoading(true);
+    setMessage("");
     try {
       if (tab === "compensation") {
         const res = await fetch("/api/executions?type=compensation&pageSize=50");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setMessage(`加载失败: ${err.error || res.status}`);
+          setCompItems([]);
+          return;
+        }
         const data = await res.json();
         setCompItems(data.items || []);
       } else {
         const res = await fetch("/api/executions?type=inventory&pageSize=50");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setMessage(`加载失败: ${err.error || res.status}`);
+          setInvItems([]);
+          return;
+        }
         const data = await res.json();
         setInvItems(data.items || []);
       }
-    } catch {} finally { setLoading(false); }
+    } catch (e: any) {
+      setMessage(`加载异常: ${e.message}`);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [tab]);
