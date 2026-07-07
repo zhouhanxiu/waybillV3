@@ -319,7 +319,12 @@ export async function PUT(req: NextRequest) {
       [id, approver, level || 1, action]
     );
     if (existingApproval.length > 0) {
-      return NextResponse.json({ message: "审批记录已存在，跳过重复提交", existing: existingApproval[0].id });
+      return NextResponse.json({
+        message: "审批记录已存在，跳过重复提交",
+        existing: existingApproval[0].id,
+        already_approved: true,
+        ticket: { id, status: ticket.status },
+      });
     }
 
     // 创建审批记录

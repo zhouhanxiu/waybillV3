@@ -239,4 +239,10 @@ export async function initDb() {
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
   } catch { /* 忽略迁移错误 */ }
+
+  // 自动补齐默认种子数据（用户、规则等）
+  try {
+    const { seedDefaults } = await import("../engine/seed");
+    await seedDefaults();
+  } catch { /* 忽略种子错误 */ }
 }

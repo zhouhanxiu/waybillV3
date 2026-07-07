@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
   let lastSyncAt: string | null = null;
   let stats24h = { total: 0, success: 0, failed: 0, success_rate: "N/A" };
   let recentLogs: any[] = [];
+  let snapshotCount = 0;
+  let snapshotAvailable = false;
 
   try {
     const lastSync = await query(
@@ -58,6 +60,11 @@ export async function GET(req: NextRequest) {
       error_message: l.error_message,
       created_at: l.created_at,
     }));
+
+    // 运单快照统计
+    const snapResult = await query("SELECT COUNT(*) as cnt FROM waybill_snapshots");
+    snapshotCount = parseInt(snapResult[0]?.cnt || "0");
+    snapshotAvailable = snapshotCount > 0;
   } catch {
     // DB 不可用，使用默认空值
   }
@@ -69,6 +76,8 @@ export async function GET(req: NextRequest) {
     last_sync_at: lastSyncAt,
     stats_24h: stats24h,
     recent_logs: recentLogs,
+    snapshot_count: snapshotCount,
+    snapshot_available: snapshotAvailable,
   });
 
 }

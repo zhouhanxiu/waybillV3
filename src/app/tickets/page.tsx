@@ -248,6 +248,8 @@ function TicketsPageInner() {
           className="px-4 py-2 rounded-xl border border-line bg-card text-sm text-ink focus:outline-none focus:ring-2 focus:ring-jingtian/20"
         >
           <option value="">全部状态</option>
+          <option value="pending,level1,level2,executing">待处理</option>
+          <option value="done,closed">已完成</option>
           {Object.entries(STATUS_MAP).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}

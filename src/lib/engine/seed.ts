@@ -1,12 +1,12 @@
 /**
  * 数据种子脚本 — 初始化默认规则和模拟用户
  */
-import { query, initDb } from "@/lib/db";
+import { query } from "@/lib/db";
 import { uid } from "@/lib/utils";
 import { hashPassword } from "@/lib/auth";
 
 export async function seedDefaults() {
-  await initDb();
+  // 注意：调用方需先执行 initDb() 确保表已创建
 
   // ──── 默认用户 ────────────────────────────────────────────────────
   const defaultUsers = [
