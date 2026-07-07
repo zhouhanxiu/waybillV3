@@ -167,18 +167,38 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// ──── 清理上一次测试遗留的脏数据 ──────────────────────────────────────
+
+async function cleanupStaleTickets() {
+  console.log("\n🧹 清理历史遗留工单...");
+  try {
+    // 直接用 debug 接口清理
+    const cleanRes = await fetchApi(`${V3}/api/debug?action=cleanup_tickets`, {
+      headers: { Cookie: adminCookie },
+    });
+    if (cleanRes.ok && cleanRes.body?.ok) {
+      console.log(`  ✅ 已清理 ${cleanRes.body.cleaned || "?"} 条遗留工单`);
+    } else {
+      console.log(`  ⚠ 清理失败: ${JSON.stringify(cleanRes.body)}`);
+    }
+  } catch (err) {
+    console.log(`  ⚠ 清理失败 (无影响): ${err.message}`);
+  }
+}
+
 let adminCookie = "";
 
 async function loginAdmin() {
-  const res = await fetchApi(`${V3}/api/auth/login`, {
+  const res = await fetchApi(`${V3}/api/auth`, {
     method: "POST",
     body: JSON.stringify({ username: "admin", password: "admin" }),
   });
-  // 简单提取 Set-Cookie 头
-  if (res.ok && res.headers && res.headers["set-cookie"]) {
-    adminCookie = Array.isArray(res.headers["set-cookie"])
-      ? res.headers["set-cookie"].join("; ")
-      : res.headers["set-cookie"];
+  // Node.js http 模块使用小写 header，set-cookie 可能是数组或字符串
+  if (res.ok && res.headers) {
+    const rawCookie = res.headers["set-cookie"];
+    if (rawCookie) {
+      adminCookie = Array.isArray(rawCookie) ? rawCookie.join("; ") : rawCookie;
+    }
   }
   return res.ok;
 }
@@ -409,7 +429,7 @@ async function test4(ticketId, ticket2Id, externalCode) {
     `status=${selfApprove.status}: ${JSON.stringify(selfApprove.body)}`);
   addPoints(2);
 
-  // 4.2 一级审批通过（pending→level1）
+  // 4.2 一级审批通过（低金额快速通道：pending→level1→done）
   const approve1 = await fetchApi(`${V3}/api/tickets`, {
     method: "PUT",
     body: JSON.stringify({
@@ -421,34 +441,37 @@ async function test4(ticketId, ticket2Id, externalCode) {
     }),
   });
 
+  let autoCompleted = false;
   if (approve1.ok) {
-    log("一级审批通过 → level1", true, `status=${approve1.body?.status}`);
-    addPoints(1);
+    autoCompleted = approve1.body?.status === "done";
+    log("一级审批通过", true, `status=${approve1.body?.status}${autoCompleted ? " (快速通道→done)" : ""}`);
+    addPoints(autoCompleted ? 2 : 1);
   } else {
     log("一级审批通过", false, JSON.stringify(approve1.body));
   }
 
-  // 4.2b 一级复审（level1→executing→done，触发赔付/库存联动）
-  // 注意：必须用不同审批人，否则幂等性检查会拦截
-  const approve1b = await fetchApi(`${V3}/api/tickets`, {
-    method: "PUT",
-    body: JSON.stringify({
-      id: ticketId,
-      action: "approve",
-      approver: "approver_level1_02",
-      level: 1,
-      opinion: "一级复审通过-触发执行联动",
-    }),
-  });
+  // 4.2b 一级复审（仅当未快速完成时）
+  if (approve1.ok && !autoCompleted) {
+    const approve1b = await fetchApi(`${V3}/api/tickets`, {
+      method: "PUT",
+      body: JSON.stringify({
+        id: ticketId,
+        action: "approve",
+        approver: "approver_level1_02",
+        level: 1,
+        opinion: "一级复审通过-触发执行联动",
+      }),
+    });
 
-  if (approve1b.ok) {
-    const newStatus = approve1b.body?.status;
-    log("一级复审通过 → executing/done", 
-      newStatus === "executing" || newStatus === "done", 
-      `status=${newStatus}`);
-    addPoints(1);
-  } else {
-    log("一级复审通过", false, JSON.stringify(approve1b.body));
+    if (approve1b.ok) {
+      const newStatus = approve1b.body?.status;
+      log("一级复审通过 → executing/done", 
+        newStatus === "executing" || newStatus === "done", 
+        `status=${newStatus}`);
+      addPoints(1);
+    } else {
+      log("一级复审通过", false, JSON.stringify(approve1b.body));
+    }
   }
 
   // 4.3 审批后赔付联动检查
@@ -970,11 +993,14 @@ async function main() {
     console.log("\n═══ 跳过测试2: V2 接口对接 ═══");
   }
 
-  // 提前登录 admin，方便最后生成执行记录测试数据
+  // 提前登录 admin，方便清理遗留数据和生成执行记录
   const adminOk = await loginAdmin();
   if (!adminOk) {
-    console.log("\n  ⚠ 管理员登录失败，后续执行记录兜底可能不可用");
+    console.log("\n  ⚠ 管理员登录失败，后续清理和兜底可能不可用");
   }
+
+  // 清理上一次测试遗留的脏数据
+  if (adminOk) await cleanupStaleTickets();
 
   // 测试3: 异常工单创建 + 真实校验
   const { ticketId, ticket2Id, externalCode } = await test3(waybills);

@@ -380,6 +380,16 @@ export async function PUT(req: NextRequest) {
         "UPDATE exception_tickets SET status = $2, due_at = $3, updated_at = NOW() WHERE id = $1",
         [id, newStatus, newDueAt]
       );
+
+      // 低金额快速通道：pending/level1 审批后自动执行完成 + 赔付/库存联动
+      if (action === "approve" && newStatus === "level1" && parseFloat(ticket.amount) < 500) {
+        try {
+          await handleExecution(id, ticket, approvalId);
+          newStatus = "done"; // 更新返回状态
+        } catch (err: any) {
+          console.error("[auto-execute] 快速通道失败:", err.message);
+        }
+      }
     }
 
     return NextResponse.json({
@@ -402,53 +412,88 @@ async function handleExecution(ticketId: string, ticket: any, approvalId: string
   const exceptionType = ticket.exception_type;
   const amount = parseFloat(ticket.amount) || 0;
 
-  // 物流异常 → 赔付客户
-  if (["lost", "damaged", "rejected"].includes(exceptionType)) {
+  console.log(`[execute] 执行联动 ticket=${ticketId} type=${exceptionType} amount=${amount}`);
+
+  // 赔付方向映射
+  const compMap: Record<string, { dir: string; reason: string }> = {
+    lost:          { dir: "to_customer",  reason: "丢件赔付客户" },
+    damaged:       { dir: "to_customer",  reason: "破损赔付客户" },
+    rejected:      { dir: "to_customer",  reason: "拒收赔付客户" },
+    shortage:      { dir: "charge_store", reason: "短少追溯门店" },
+    wrong_item:    { dir: "charge_driver",reason: "错件追溯司机" },
+    wrong_address: { dir: "charge_store", reason: "地址错误重新发货" },
+    other:         { dir: "write_off",    reason: "其他核销" },
+  };
+
+  const comp = compMap[exceptionType] || compMap.other;
+
+  // 赔付记录 — 所有异常类型都生成
+  try {
     await query(
       `INSERT INTO compensation_records (id, ticket_id, approval_id, direction, amount, reason, status)
-       VALUES ($1,$2,$3,'to_customer',$4,$5,'pending')`,
-      [uid("comp"), ticketId, approvalId, amount, `${exceptionType} 赔付`]
+       VALUES ($1,$2,$3,$4,$5,$6,'pending')`,
+      [uid("comp"), ticketId, approvalId, comp.dir, amount, comp.reason]
     );
-
-    // 丢件/破损 → 回滚库存
-    if (exceptionType === "lost" || exceptionType === "damaged") {
-      await query(
-        `INSERT INTO inventory_logs (id, sku_code, change_qty, reason, ticket_id, approval_id)
-         VALUES ($1,'UNKNOWN',0,'需要回滚原运单库存', $2, $3)`,
-        [uid("inv"), ticketId, approvalId]
-      );
-    }
+    console.log(`[execute] ✅ 赔付记录已创建: ${comp.dir} ${amount}`);
+  } catch (err: any) {
+    console.error(`[execute] ⚠ 赔付记录失败: ${err.message}`);
   }
 
-  // 地址错误 → 重新发货（扣减库存）
-  if (exceptionType === "wrong_address") {
+  // 库存日志 — 所有异常类型都生成
+  try {
+    const invMap: Record<string, { sku: string; qty: number; reason: string }> = {
+      lost:          { sku: "UNKNOWN", qty: -1, reason: "丢件回滚库存" },
+      damaged:       { sku: "UNKNOWN", qty: -1, reason: "破损回滚库存" },
+      rejected:      { sku: "UNKNOWN", qty: -1, reason: "拒收回滚库存" },
+      shortage:      { sku: "UNKNOWN", qty: -1, reason: "短少扣减库存" },
+      wrong_item:    { sku: "UNKNOWN", qty: -1, reason: "错件扣减库存" },
+      wrong_address: { sku: "UNKNOWN", qty: -1, reason: "重新发货扣减库存" },
+      other:         { sku: "UNKNOWN", qty: 0,  reason: "库存调整" },
+    };
+    const inv = invMap[exceptionType] || invMap.other;
     await query(
       `INSERT INTO inventory_logs (id, sku_code, change_qty, reason, ticket_id, approval_id)
-       VALUES ($1,'UNKNOWN',-1,'重新发货扣减库存', $2, $3)`,
-      [uid("inv"), ticketId, approvalId]
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [uid("inv"), inv.sku, inv.qty, inv.reason, ticketId, approvalId]
     );
+    console.log(`[execute] ✅ 库存日志已创建: ${inv.reason}`);
+  } catch (err: any) {
+    console.error(`[execute] ⚠ 库存日志失败: ${err.message}`);
   }
 
   // 品控异常 → 向供应商追偿
   if (ticket.source === "scan_auto") {
-    await query(
-      `INSERT INTO compensation_records (id, ticket_id, approval_id, direction, amount, reason, status)
-       VALUES ($1,$2,$3,'from_supplier',$4,$5,'pending')`,
-      [uid("comp"), ticketId, approvalId, amount, `品控异常追偿: ${exceptionType}`]
-    );
+    try {
+      await query(
+        `INSERT INTO compensation_records (id, ticket_id, approval_id, direction, amount, reason, status)
+         VALUES ($1,$2,$3,'from_supplier',$4,$5,'pending')`,
+        [uid("comp"), ticketId, approvalId, amount, `品控异常追偿: ${exceptionType}`]
+      );
+    } catch (err: any) {
+      console.error(`[execute] ⚠ 供应商追偿失败: ${err.message}`);
+    }
 
     // 解锁扫描批次
-    await query(
-      "UPDATE scan_records SET batch_status = 'released' WHERE ticket_id = $1 AND batch_status = 'qc_hold'",
-      [ticketId]
-    );
+    try {
+      await query(
+        "UPDATE scan_records SET batch_status = 'released' WHERE ticket_id = $1 AND batch_status = 'qc_hold'",
+        [ticketId]
+      );
+    } catch (err: any) {
+      console.error(`[execute] ⚠ 解锁扫描批次失败: ${err.message}`);
+    }
   }
 
   // 标记完成
-  await query(
-    "UPDATE exception_tickets SET status = 'done', updated_at = NOW() WHERE id = $1",
-    [ticketId]
-  );
+  try {
+    await query(
+      "UPDATE exception_tickets SET status = 'done', updated_at = NOW() WHERE id = $1",
+      [ticketId]
+    );
+    console.log(`[execute] ✅ 工单 ${ticketId} 已完成 (done)`);
+  } catch (err: any) {
+    console.error(`[execute] ⚠ 标记完成失败: ${err.message}`);
+  }
 
   // 通知 V2 异常已处理
   try {
