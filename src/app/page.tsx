@@ -36,17 +36,10 @@ export default function DashboardPage() {
   const [v2Status, setV2Status] = useState<boolean | null>(null);
 
   useEffect(() => {
-    async function load() {
+    async function loadDashboard() {
       try {
-        // 获取工单统计
-        const [dashboardRes, monitorRes] = await Promise.all([
-          fetch("/api/dashboard"),
-          fetch("/api/monitor"),
-        ]);
+        const dashboardRes = await fetch("/api/dashboard");
         const dashboardData = await dashboardRes.json();
-        const monitorData = await monitorRes.json();
-
-        setV2Status(monitorData.v2_healthy);
         setStats({
           total_tickets: dashboardData.total_tickets || 0,
           pending_tickets: dashboardData.pending_tickets || 0,
@@ -61,7 +54,17 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
-    load();
+    async function loadV2Status() {
+      try {
+        const monitorRes = await fetch("/api/monitor");
+        const monitorData = await monitorRes.json();
+        setV2Status(monitorData.v2_healthy);
+      } catch {
+        // ignore
+      }
+    }
+    loadDashboard();
+    loadV2Status();
   }, []);
 
   const cards = [

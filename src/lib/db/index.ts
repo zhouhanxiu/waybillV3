@@ -49,6 +49,7 @@ export async function initDb() {
 }
 
 async function _initDbInternal() {
+  // 所有 DDL 均为 IF NOT EXISTS/IF EXISTS，可安全并行，减少 serverless 冷启动往返
   const statements = [
     // 运单本地快照
     `CREATE TABLE IF NOT EXISTS waybill_snapshots (
@@ -210,62 +211,46 @@ async function _initDbInternal() {
     )`,
     // 索引
     `CREATE INDEX IF NOT EXISTS idx_tickets_status ON exception_tickets(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_source ON exception_tickets(source)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_status_updated ON exception_tickets(status, updated_at)`,
     `CREATE INDEX IF NOT EXISTS idx_tickets_reporter ON exception_tickets(reporter)`,
     `CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON exception_tickets(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_approvals_ticket ON approval_records(ticket_id)`,
     `CREATE INDEX IF NOT EXISTS idx_scan_ticket ON scan_records(ticket_id)`,
     `CREATE INDEX IF NOT EXISTS idx_scan_batch_status ON scan_records(batch_status)`,
+    `CREATE INDEX IF NOT EXISTS idx_scan_created_at ON scan_records(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_logs_req ON sync_logs(request_id)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_snapshots_external ON waybill_snapshots(external_code)`,
   ];
 
-  for (const sqlText of statements) {
-    await dbRaw(sqlText);
-  }
+  await Promise.all(statements.map(sqlText => dbRaw(sqlText)));
 
-  // ──── 兼容迁移：为旧表补充缺失列 ──────────────────────────────────
-  const migrations: Record<string, string[]> = {
-    users: [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]'`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
-    ],
-    approval_flow_configs: [
-      `ALTER TABLE approval_flow_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
-    ],
-    qc_rules: [
-      `ALTER TABLE qc_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
-    ],
-    approval_level_rules: [
-      `ALTER TABLE approval_level_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
-    ],
-    timeout_rules: [
-      `ALTER TABLE timeout_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
-    ],
-    exception_tickets: [
-      `ALTER TABLE exception_tickets ADD COLUMN IF NOT EXISTS due_at TIMESTAMP`,
-    ],
-  };
+  // ──── 兼容迁移：为旧表补充缺失列（ALTER ADD COLUMN IF NOT EXISTS 可并行） ──────────────────────────────────
+  const migrations: string[] = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE approval_flow_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE qc_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE approval_level_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE timeout_rules ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE exception_tickets ADD COLUMN IF NOT EXISTS due_at TIMESTAMP`,
+  ];
 
-  for (const [table, statements] of Object.entries(migrations)) {
-    for (const sqlText of statements) {
-      try {
-        await dbRaw(sqlText);
-      } catch { /* 忽略单个迁移错误 */ }
-    }
-  }
+  await Promise.all(migrations.map(sqlText => dbRaw(sqlText).catch(() => { /* 忽略单个迁移错误 */ })));
 
   // 兼容迁移：为没有密码的旧用户设置默认密码（仅首次，有密码则跳过）
   try {
     const { hashPassword } = await import("../auth");
     const rows = await dbRaw("SELECT id, name FROM users WHERE password_hash = '' OR password_hash IS NULL");
-    for (const r of rows as any[]) {
+    await Promise.all((rows as any[]).map(async (r) => {
       const pw = r.name === "admin" ? "admin" : "123456";
       const pwHash = await hashPassword(pw);
       await dbRaw("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
-    }
+    }));
   } catch { /* 忽略迁移错误 */ }
 
   // 自动补齐默认种子数据（用户、规则等）
