@@ -1,7 +1,7 @@
 /**
  * 数据种子脚本 — 初始化默认规则和模拟用户
  */
-import { query } from "@/lib/db";
+import { dbRaw } from "@/lib/db";
 import { uid } from "@/lib/utils";
 import { hashPassword } from "@/lib/auth";
 
@@ -23,10 +23,10 @@ export async function seedDefaults() {
   ];
 
   for (const u of defaultUsers) {
-    const existing = await query("SELECT id FROM users WHERE name = $1", [u.name]);
+    const existing = await dbRaw("SELECT id FROM users WHERE name = $1", [u.name]);
     if (existing.length === 0) {
       const pwHash = await hashPassword(u.password);
-      await query(
+      await dbRaw(
         "INSERT INTO users (id, name, password_hash, display_name, roles) VALUES ($1, $2, $3, $4, $5)",
         [uid("user"), u.name, pwHash, u.name, JSON.stringify(u.roles)]
       );
@@ -40,12 +40,12 @@ export async function seedDefaults() {
   ];
 
   for (const rule of approvalRules) {
-    const existing = await query(
+    const existing = await dbRaw(
       "SELECT id FROM approval_level_rules WHERE level = $1 AND min_amount = $2",
       [rule.level, rule.min_amount]
     );
     if (existing.length === 0) {
-      await query(
+      await dbRaw(
         `INSERT INTO approval_level_rules (id, level, min_amount, max_amount, exception_types, enabled)
          VALUES ($1,$2,$3,$4,$5,true)`,
         [uid("apprule"), rule.level, rule.min_amount, rule.max_amount, JSON.stringify([])]
@@ -62,11 +62,11 @@ export async function seedDefaults() {
   ];
 
   for (const rule of timeoutRules) {
-    const existing = await query(
+    const existing = await dbRaw(
       "SELECT id FROM timeout_rules WHERE scope = $1", [rule.scope]
     );
     if (existing.length === 0) {
-      await query(
+      await dbRaw(
         `INSERT INTO timeout_rules (id, scope, timeout_minutes, action, enabled)
          VALUES ($1,$2,$3,$4,true)`,
         [uid("trule"), rule.scope, rule.timeout_minutes, rule.action]
@@ -128,11 +128,11 @@ export async function seedDefaults() {
   ];
 
   for (const rule of qcRules) {
-    const existing = await query(
+    const existing = await dbRaw(
       "SELECT id FROM qc_rules WHERE name = $1", [rule.name]
     );
     if (existing.length === 0) {
-      await query(
+      await dbRaw(
         `INSERT INTO qc_rules (id, name, exception_subtype, condition, severity, auto_create_ticket, approval_level, enabled)
          VALUES ($1,$2,$3,$4,$5,true,$6,true)`,
         [uid("qcrule"), rule.name, rule.subtype, JSON.stringify(rule.condition), rule.severity, rule.level]
@@ -152,9 +152,9 @@ export async function seedDefaults() {
   ];
 
   for (const flow of defaultFlows) {
-    const existing = await query("SELECT id FROM approval_flow_configs WHERE name = $1", [flow.name]);
+    const existing = await dbRaw("SELECT id FROM approval_flow_configs WHERE name = $1", [flow.name]);
     if (existing.length === 0) {
-      await query(
+      await dbRaw(
         `INSERT INTO approval_flow_configs (id, name, steps, enabled) VALUES ($1, $2, $3, true)`,
         [uid("flow"), flow.name, JSON.stringify(flow.steps)]
       );

@@ -10,8 +10,8 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 15,
-      idle_timeout: 20,
+      max: 5,
+      idle_timeout: 10,
       connect_timeout: 10,
     });
   }
@@ -35,10 +35,12 @@ export async function query<T = any>(sqlText: string, params?: any[]) {
   return (await db.unsafe(sqlText, params)) as T[];
 }
 
-/** 内部直接执行 SQL，不走 query() 的自动初始化逻辑（避免递归） */
-async function _dbExec(sqlText: string, params?: any[]) {
+/**
+ * 绕过 auto-init 直接执行 SQL，供 initDb / seedDefaults 内部使用（避免死锁）
+ */
+export async function dbRaw<T = any>(sqlText: string, params?: any[]): Promise<T[]> {
   const db = getDb();
-  return (await db.unsafe(sqlText, params)) as any[];
+  return (await db.unsafe(sqlText, params)) as T[];
 }
 
 export async function initDb() {
@@ -217,7 +219,7 @@ async function _initDbInternal() {
   ];
 
   for (const sqlText of statements) {
-    await _dbExec(sqlText);
+    await dbRaw(sqlText);
   }
 
   // ──── 兼容迁移：为旧表补充缺失列 ──────────────────────────────────
@@ -249,7 +251,7 @@ async function _initDbInternal() {
   for (const [table, statements] of Object.entries(migrations)) {
     for (const sqlText of statements) {
       try {
-        await _dbExec(sqlText);
+        await dbRaw(sqlText);
       } catch { /* 忽略单个迁移错误 */ }
     }
   }
@@ -257,11 +259,11 @@ async function _initDbInternal() {
   // 兼容迁移：为没有密码的旧用户设置默认密码，admin 用 "admin"，其他用 "123456"
   try {
     const { hashPassword } = await import("../auth");
-    const rows = await _dbExec("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
+    const rows = await dbRaw("SELECT id, name, password_hash FROM users WHERE password_hash = '' OR password_hash IS NULL");
     for (const r of rows as any[]) {
       const pw = r.name === "admin" ? "admin" : "123456";
       const pwHash = await hashPassword(pw);
-      await _dbExec("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
+      await dbRaw("UPDATE users SET password_hash = $1 WHERE id = $2", [pwHash, r.id]);
     }
   } catch { /* 忽略迁移错误 */ }
 
@@ -269,7 +271,7 @@ async function _initDbInternal() {
   try {
     const { hashPassword } = await import("../auth");
     const pwHash123 = await hashPassword("123456");
-    await _dbExec("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE name != 'admin' AND password_hash != $1", [pwHash123]);
+    await dbRaw("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE name != 'admin' AND password_hash != $1", [pwHash123]);
   } catch { /* 忽略迁移错误 */ }
 
   // 自动补齐默认种子数据（用户、规则等）
