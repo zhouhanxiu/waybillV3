@@ -9,16 +9,11 @@ export async function GET() {
   try {
     await initDb();
 
-    // 检查用户表是否为空，若为空则重新执行种子脚本
+    // 始终执行种子脚本（seedDefaults 内部已有去重检查，幂等安全）
+    const seedResult = await seedDefaults();
     const countRes = (await query("SELECT COUNT(*)::int AS cnt FROM users")) as any[];
-    const userCount = countRes[0]?.cnt ?? 0;
 
-    if (Number(userCount) === 0) {
-      await seedDefaults();
-      return NextResponse.json({ status: "ok", seeded: true, users: 6 });
-    }
-
-    return NextResponse.json({ status: "ok", seeded: false, users: Number(userCount) });
+    return NextResponse.json({ status: "ok", seeded: true, users: Number(countRes[0]?.cnt ?? 0) });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

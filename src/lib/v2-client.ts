@@ -295,27 +295,26 @@ export async function validateWaybillInV2(externalCode: string): Promise<{
         [snapshot.id]
       );
 
-      if (itemRows.length > 0) {
-        return {
-          valid: true,
-          snapshotId: snapshot.id,
-          waybill: {
-            id: snapshot.id,
-            external_code: externalCode,
-            store_name: snapshot.store_name || "",
-            receiver_name: snapshot.receiver_name || "",
-            receiver_phone: snapshot.receiver_phone || "",
-            receiver_address: snapshot.receiver_address || "",
-            items: itemRows.map((r: any) => ({
-              id: r.id,
-              sku_code: r.sku_code,
-              sku_name: r.sku_name,
-              quantity: Number(r.quantity || 0),
-              spec: r.spec,
-            })),
-          },
-        };
-      }
+      // 本地快照存在，即使没有 items 也认为有效（容错降级）
+      return {
+        valid: true,
+        snapshotId: snapshot.id,
+        waybill: {
+          id: snapshot.id,
+          external_code: externalCode,
+          store_name: snapshot.store_name || "",
+          receiver_name: snapshot.receiver_name || "",
+          receiver_phone: snapshot.receiver_phone || "",
+          receiver_address: snapshot.receiver_address || "",
+          items: itemRows.map((r: any) => ({
+            id: r.id,
+            sku_code: r.sku_code,
+            sku_name: r.sku_name,
+            quantity: Number(r.quantity || 0),
+            spec: r.spec,
+          })),
+        },
+      };
     }
 
     // 2. 本地无快照或不完整，回源 V2（一次 sync 请求即可拿到完整运单及 items）

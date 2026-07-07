@@ -13,9 +13,13 @@ export async function seedDefaults() {
     { name: "admin", password: "admin", roles: ["admin"] },
     { name: "qc_supervisor", password: "123456", roles: ["qc_supervisor"] },
     { name: "approver_level1_01", password: "123456", roles: ["level1_approver"] },
+    { name: "approver_level1_02", password: "123456", roles: ["level1_approver"] },
     { name: "approver_level2_01", password: "123456", roles: ["level2_approver"] },
     { name: "reporter_01", password: "123456", roles: ["reporter"] },
     { name: "operator_01", password: "123456", roles: ["operator"] },
+    { name: "test_reporter_01", password: "123456", roles: ["reporter"] },
+    { name: "test_reporter_02", password: "123456", roles: ["reporter"] },
+    { name: "test_reporter_03", password: "123456", roles: ["reporter"] },
   ];
 
   for (const u of defaultUsers) {

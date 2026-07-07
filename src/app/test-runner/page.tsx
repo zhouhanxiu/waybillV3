@@ -58,16 +58,35 @@ async function v3Self(path: string, opts: RequestInit = {}) {
 }
 
 async function cleanupOpenTickets() {
-  const list = await v3Self("/api/tickets");
+  // 先获取所有工单
+  const list = await v3Self("/api/tickets?pageSize=500");
   const items = list.body?.items || [];
   const openTickets = items.filter((t: any) => !["done", "closed"].includes(t.status));
-  const approvers = [ROLES.level1_approver, ROLES.level2_approver, ROLES.admin];
-  for (const ticket of openTickets) {
-    for (let i = 0; i < 3; i++) {
-      await v3Self("/api/tickets", {
+
+  // 对于 executing 状态的，先 approve 让它进入 done
+  for (const ticket of openTickets.filter((t: any) => t.status === "executing")) {
+    await v3Self("/api/tickets", {
+      method: "PUT",
+      body: JSON.stringify({ action: "approve", id: ticket.id, approver: ROLES.level2_approver, level: 2, opinion: "测试清理-完成" }),
+    });
+  }
+
+  // 对于其他未关闭工单，反复 reject 直到 closed
+  for (const ticket of openTickets.filter((t: any) => t.status !== "executing")) {
+    for (let i = 0; i < 5; i++) {
+      const res = await v3Self("/api/tickets", {
         method: "PUT",
-        body: JSON.stringify({ action: "reject", id: ticket.id, approver: approvers[i % approvers.length], opinion: "测试清理" }),
+        body: JSON.stringify({
+          action: "reject",
+          id: ticket.id,
+          approver: ticket.status === "level2" ? ROLES.level2_approver : ROLES.level1_approver,
+          opinion: "测试清理",
+        }),
       });
+      // 如果已经 closed/done，停止
+      const checkRes = await v3Self(`/api/tickets?id=${ticket.id}`);
+      const st = checkRes.body?.status || "";
+      if (["done", "closed"].includes(st)) break;
     }
   }
 }
@@ -281,10 +300,13 @@ export default function TestRunnerPage() {
 
     // 3.4 高金额跳过一级
     setCurrentLine("考点3: 高金额工单...");
+    // 使用不同的运单号避免与前面工单冲突
+    const wb2 = state.testWaybills.length > 1 ? state.testWaybills[1] : state.testWaybills[0];
+    const ec2 = wb2.external_code || "TEST-EXAM-002";
     const highTicket = await v3Self("/api/tickets", {
       method: "POST",
       body: JSON.stringify({
-        waybill_snapshot_id: wb.id || "snap_test", external_code: ec,
+        waybill_snapshot_id: wb2.id || "snap_test", external_code: ec2,
         exception_type: "damaged", source: "manual", severity: "high",
         description: "高额破损", amount: 1200, reporter: ROLES.reporter2,
       }),
@@ -294,15 +316,17 @@ export default function TestRunnerPage() {
         `status=${highTicket.body.status}`);
       if (highTicket.body.id) state.createdTicketIds.push(highTicket.body.id);
     } else {
-      t3("高金额工单创建", false, `status=${highTicket.status}`);
+      t3("高金额工单创建", false, `status=${highTicket.status} ${JSON.stringify(highTicket.body).slice(0, 80)}`);
     }
 
     // 3.5 拒绝→pending + retry_count
     setCurrentLine("考点3: 拒绝重提...");
+    const wb3 = state.testWaybills.length > 2 ? state.testWaybills[2] : state.testWaybills[0];
+    const ec3 = wb3.external_code || "TEST-EXAM-003";
     const rejectTicket = await v3Self("/api/tickets", {
       method: "POST",
       body: JSON.stringify({
-        waybill_snapshot_id: wb.id || "snap_test", external_code: ec,
+        waybill_snapshot_id: wb3.id || "snap_test", external_code: ec3,
         exception_type: "wrong_item", source: "manual", severity: "low",
         description: "拒绝重提测试", amount: 100, reporter: ROLES.reporter3,
       }),
@@ -336,10 +360,12 @@ export default function TestRunnerPage() {
 
     // 3.7 并发冲突
     setCurrentLine("考点3: 并发冲突...");
+    const wb4 = state.testWaybills.length > 3 ? state.testWaybills[3] : state.testWaybills[0];
+    const ec4 = wb4.external_code || "TEST-EXAM-004";
     const conTicket = await v3Self("/api/tickets", {
       method: "POST",
       body: JSON.stringify({
-        waybill_snapshot_id: wb.id || "snap_test", external_code: ec,
+        waybill_snapshot_id: wb4.id || "snap_test", external_code: ec4,
         exception_type: "shortage", source: "manual", severity: "medium",
         description: "并发冲突测试", amount: 500, reporter: ROLES.reporter1,
       }),
@@ -372,10 +398,13 @@ export default function TestRunnerPage() {
     const exceptionTypes = ["lost", "damaged", "shortage", "wrong_item"];
     const severities = ["low", "medium", "high"];
 
+    // 使用 waybills 中还未被考点3用过的运单号（跳过前4个）
+    const skipCount = 4; // 考点3用了0-3号
     const batchCodes: string[] = [];
     for (let i = 0; i < TOTAL; i++) {
-      if (i < state.testWaybills.length) {
-        batchCodes.push(state.testWaybills[i].external_code || `BATCH-WB-${i.toString().padStart(3, "0")}`);
+      const idx = skipCount + i;
+      if (idx < state.testWaybills.length) {
+        batchCodes.push(state.testWaybills[idx].external_code || `BATCH-WB-${idx.toString().padStart(3, "0")}`);
       } else {
         batchCodes.push(`BATCH-${i.toString().padStart(3, "0")}`);
       }
@@ -383,11 +412,12 @@ export default function TestRunnerPage() {
 
     // 分批并发，避免打爆 DB 连接池
     const CONCURRENCY = 5;
-    const batchFns = Array.from({ length: TOTAL }, (_, i) => () =>
-      v3Self("/api/tickets", {
+    const batchFns = Array.from({ length: TOTAL }, (_, i) => () => {
+      const wbIdx = (skipCount + i) % state.testWaybills.length;
+      return v3Self("/api/tickets", {
         method: "POST",
         body: JSON.stringify({
-          waybill_snapshot_id: state.testWaybills[i % state.testWaybills.length]?.id || "snap_test",
+          waybill_snapshot_id: state.testWaybills[wbIdx]?.id || "snap_test",
           external_code: batchCodes[i],
           exception_type: exceptionTypes[i % 4],
           source: "manual",
@@ -396,8 +426,8 @@ export default function TestRunnerPage() {
           amount: 50 + Math.floor(Math.random() * 1950),
           reporter: [ROLES.reporter1, ROLES.reporter2, ROLES.reporter3][i % 3],
         }),
-      })
-    );
+      });
+    });
     const batchResults: any[] = [];
     for (let b = 0; b < batchFns.length; b += CONCURRENCY) {
       const chunk = batchFns.slice(b, b + CONCURRENCY);
@@ -515,6 +545,10 @@ export default function TestRunnerPage() {
     const waybillsData = state.testWaybills.length > 0
       ? state.testWaybills
       : (Array.isArray(sync2Body) ? sync2Body : []);
+    // 如果 waybillsData 还是空的，用 sync2 的结果补充
+    if (waybillsData.length === 0 && Array.isArray(sync2Body) && sync2Body.length > 0) {
+      state.testWaybills.push(...sync2Body);
+    }
 
     if (waybillsData.length > 0) {
       const snapWrite = await v3Self("/api/waybills/snapshot", {
