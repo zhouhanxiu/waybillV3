@@ -78,7 +78,7 @@ const ROLES = {
   admin: "admin",
   level1_approver: "approver_level1_01",
   level2_approver: "approver_level2_01",
-  qc_supervisor: "qc_supervisor_01",
+  qc_supervisor: "qc_supervisor",
   operator: "operator_01",
   reporter1: "test_reporter_01",
   reporter2: "test_reporter_02",
@@ -139,6 +139,11 @@ export default function TestRunnerPage() {
 
     let ptsTotal = 0;
     let ptsMax = 0;
+
+    // 确保 DB 表结构和种子数据已初始化
+    setCurrentLine("初始化数据库...");
+    await v3Self("/api/init-db");
+    await new Promise(r => setTimeout(r, 500));
 
     const add = (cat: string, maxPts: number) => {
       const catFn = addResult(cat, maxPts);
@@ -439,8 +444,8 @@ export default function TestRunnerPage() {
     items.forEach((t: any) => { td[t.exception_type] = (td[t.exception_type] || 0) + 1; });
     t4("异常类型覆盖", Object.keys(td).length >= 3, `覆盖${Object.keys(td).length}种`);
 
-    const approvedCount = sd["approved"] || 0;
-    t4("赔付记录生成(approved)", approvedCount > 0, `approved=${approvedCount}`);
+    const doneCount = sd["done"] || 0;
+    t4("赔付记录生成(approved)", doneCount > 0, `done=${doneCount}`);
 
     // 回写V2
     if (state.testWaybills.length > 0) {
@@ -587,13 +592,13 @@ export default function TestRunnerPage() {
       if (state.createdScanIds.length > 0) {
         const scanId = state.createdScanIds[0];
         const release = await v3Self("/api/scan", {
-          method: "POST",
+          method: "PUT",
           body: JSON.stringify({ scan_id: scanId, operator: ROLES.qc_supervisor, reason: "品控主管复核放行" }),
         });
         t7("品控主管快速放行", release.ok, `status=${release.status}`);
 
         const noPerm = await v3Self("/api/scan", {
-          method: "POST",
+          method: "PUT",
           body: JSON.stringify({ scan_id: scanId, operator: ROLES.operator, reason: "普通操作员试图放行" }),
         });
         t7("快速放行权限隔离(普通操作员→403)", noPerm.status === 403, `status=${noPerm.status}`);
