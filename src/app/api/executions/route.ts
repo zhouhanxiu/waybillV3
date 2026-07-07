@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
     let idx = 0;
     if (status) { idx++; sql += ` AND c.status = $${idx}`; params.push(status); }
 
-    const countResult = await query(sql.replace("SELECT c.*", "SELECT COUNT(*) as total"), params);
+    let countSql = `SELECT COUNT(*) as total FROM compensation_records c LEFT JOIN exception_tickets t ON c.ticket_id = t.id WHERE 1=1`;
+    const countParams: any[] = [];
+    if (status) { countSql += ` AND c.status = $1`; countParams.push(status); }
+    const countResult = await query(countSql, countParams);
     const total = parseInt(countResult[0]?.total || "0");
 
     idx++; sql += ` ORDER BY c.created_at DESC LIMIT $${idx}`; params.push(pageSize);
