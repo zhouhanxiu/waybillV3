@@ -381,23 +381,29 @@ export default function TestRunnerPage() {
       }
     }
 
-    const batchResults = await Promise.all(
-      Array.from({ length: TOTAL }, (_, i) =>
-        v3Self("/api/tickets", {
-          method: "POST",
-          body: JSON.stringify({
-            waybill_snapshot_id: state.testWaybills[i % state.testWaybills.length]?.id || "snap_test",
-            external_code: batchCodes[i],
-            exception_type: exceptionTypes[i % 4],
-            source: "manual",
-            severity: severities[i % 3],
-            description: `批量测试-${i}-${exceptionTypes[i % 4]}`,
-            amount: 50 + Math.floor(Math.random() * 1950),
-            reporter: [ROLES.reporter1, ROLES.reporter2, ROLES.reporter3][i % 3],
-          }),
-        })
-      )
+    // 分批并发，避免打爆 DB 连接池
+    const CONCURRENCY = 5;
+    const batchFns = Array.from({ length: TOTAL }, (_, i) => () =>
+      v3Self("/api/tickets", {
+        method: "POST",
+        body: JSON.stringify({
+          waybill_snapshot_id: state.testWaybills[i % state.testWaybills.length]?.id || "snap_test",
+          external_code: batchCodes[i],
+          exception_type: exceptionTypes[i % 4],
+          source: "manual",
+          severity: severities[i % 3],
+          description: `批量测试-${i}-${exceptionTypes[i % 4]}`,
+          amount: 50 + Math.floor(Math.random() * 1950),
+          reporter: [ROLES.reporter1, ROLES.reporter2, ROLES.reporter3][i % 3],
+        }),
+      })
     );
+    const batchResults: any[] = [];
+    for (let b = 0; b < batchFns.length; b += CONCURRENCY) {
+      const chunk = batchFns.slice(b, b + CONCURRENCY);
+      const chunkResults = await Promise.all(chunk.map(fn => fn()));
+      batchResults.push(...chunkResults);
+    }
 
     const successCount = batchResults.filter(r => r?.ok && !r?.body?.existing_ticket).length;
     const dupCount = batchResults.filter(r => r?.ok && r?.body?.existing_ticket).length;
@@ -428,7 +434,12 @@ export default function TestRunnerPage() {
       ),
     ];
 
-    const approveResults = await Promise.all(appTasks.map(fn => fn()));
+    const approveResults: any[] = [];
+    for (let b = 0; b < appTasks.length; b += CONCURRENCY) {
+      const chunk = appTasks.slice(b, b + CONCURRENCY);
+      const chunkResults = await Promise.all(chunk.map(fn => fn()));
+      approveResults.push(...chunkResults);
+    }
     const appOk = approveResults.filter(r => r?.ok).length;
     t4(`批量审批${appTasks.length}条(一级+二级)`, appOk >= Math.min(10, appTasks.length * 0.7),
       `成功${appOk}/${appTasks.length}`);

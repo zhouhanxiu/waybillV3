@@ -8,7 +8,7 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 3,
+      max: 10,
       idle_timeout: 20,
       connect_timeout: 10,
     });
