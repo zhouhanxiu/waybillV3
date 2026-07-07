@@ -90,7 +90,7 @@ export async function seedDefaults() {
     }
   }
 
-  // 品控规则
+  // 品控规则 — 先删除已知规则再重新插入，确保操作符等配置始终为最新版本
   const qcRules = [
     { name: "数量差异 > 10%", subtype: "qty_mismatch", condition: [{ field: "qty_diff_pct", operator: "gt", value: 10 }], severity: "medium", level: 1 },
     { name: "数量差异 > 30%", subtype: "qty_mismatch", condition: [{ field: "qty_diff_pct", operator: "gt", value: 30 }], severity: "high", level: 2 },
@@ -100,15 +100,24 @@ export async function seedDefaults() {
     { name: "标签错误", subtype: "label_error", condition: [{ field: "label_valid", operator: "eq", value: 0 }], severity: "high", level: 2 },
     { name: "批次异常", subtype: "batch_error", condition: [{ field: "batch_valid", operator: "eq", value: 0 }], severity: "critical", level: 2 },
   ];
+
+  const knownQcNames = qcRules.map(r => r.name);
+  // 删除旧版本规则（按名称，不影响用户自定义规则），确保条件操作符始终正确
+  if (knownQcNames.length > 0) {
+    const placeholders = knownQcNames.map((_, i) => `$${i + 1}`).join(",");
+    inserts.push(dbRaw(`DELETE FROM qc_rules WHERE name IN (${placeholders})`, knownQcNames));
+  }
+  // 等待 DELETE 执行完再 INSERT，确保没有残留旧规则
+  await Promise.all(inserts);
+  inserts.length = 0;
+
   for (const rule of qcRules) {
-    if (!qcNames.has(rule.name)) {
-      inserts.push(
-        dbRaw(
-          "INSERT INTO qc_rules (id, name, exception_subtype, condition, severity, auto_create_ticket, approval_level, enabled) VALUES ($1,$2,$3,$4,$5,true,$6,true)",
-          [uid("qcrule"), rule.name, rule.subtype, JSON.stringify(rule.condition), rule.severity, rule.level]
-        )
-      );
-    }
+    inserts.push(
+      dbRaw(
+        "INSERT INTO qc_rules (id, name, exception_subtype, condition, severity, auto_create_ticket, approval_level, enabled) VALUES ($1,$2,$3,$4,$5,true,$6,true)",
+        [uid("qcrule"), rule.name, rule.subtype, JSON.stringify(rule.condition), rule.severity, rule.level]
+      )
+    );
   }
 
   // 审批流配置
