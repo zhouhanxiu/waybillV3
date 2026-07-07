@@ -8,9 +8,10 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 10,
-      idle_timeout: 20,
+      max: 5,                  // 配合 Supabase pool_size=100
+      idle_timeout: 10,
       connect_timeout: 10,
+      max_lifetime: 60,
     });
   }
   return sql;
