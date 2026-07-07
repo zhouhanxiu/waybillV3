@@ -109,7 +109,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "无变更" }, { status: 400 });
     }
 
-    idx++; updates.push(`updated_at = NOW()`);
+    updates.push(`updated_at = NOW()`);
     idx++; params.push(id);
 
     await query(`UPDATE users SET ${updates.join(", ")} WHERE id = $${idx}`, params);
