@@ -270,12 +270,16 @@ export async function checkV2Health(): Promise<boolean> {
  * 所有涉及运单号的接口都应通过此函数校验。
  * @returns { valid, snapshotId, waybill } — valid=false 时需拒绝请求
  */
-export async function validateWaybillInV2(externalCode: string): Promise<{
+export async function validateWaybillInV2(
+  externalCode: string,
+  options: { allowFallback?: boolean } = {}
+): Promise<{
   valid: boolean;
   snapshotId: string;
   waybill: V2Waybill | null;
   reason?: string;
 }> {
+  const { allowFallback = true } = options;
   try {
     const { getDb } = await import("./db");
     const db = getDb();
@@ -320,7 +324,11 @@ export async function validateWaybillInV2(externalCode: string): Promise<{
     // 2. 本地无快照或不完整，回源 V2（一次 sync 请求即可拿到完整运单及 items）
     const [wb] = await syncWaybillsFromV2([externalCode]);
     if (!wb) {
-      // 容错：V2 中不存在的运单号，创建假快照放行（测试/批量场景）
+      // 严格模式：V2 中不存在的运单号，拒绝请求
+      if (!allowFallback) {
+        return { valid: false, snapshotId: "", waybill: null, reason: `运单号 ${externalCode} 在 V2 中不存在` };
+      }
+      // 容错：测试/批量场景创建假快照放行
       const fallbackId = uid("snap_fb");
       try {
         await db.unsafe(

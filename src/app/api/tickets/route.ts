@@ -150,9 +150,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
     }
 
-    // 统一校验：运单在 V2 是否存在 + 确保本地快照
+    // 统一校验：运单在 V2 是否存在 + 确保本地快照（严格模式，不存在的运单不允许上报）
     const { validateWaybillInV2 } = await import("@/lib/v2-client");
-    const vResult = await validateWaybillInV2(external_code);
+    const vResult = await validateWaybillInV2(external_code, { allowFallback: false });
     if (!vResult.valid) {
       return NextResponse.json({ error: vResult.reason }, { status: 400 });
     }
