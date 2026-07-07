@@ -13,6 +13,7 @@
  *   7. 扫描品控链路 (通过、不通过、快速放行)
  *   8. 跨系统接口一致性 (Request ID、sync_logs)
  *   9. Dashboard 统计
+ *  10. 特定运单 WD-20260706-0009 验证
  */
 
 import https from "node:https";
@@ -279,9 +280,6 @@ async function test2() {
     log("V2 异常回写接口", notifyRes.ok, `status=${notifyRes.status}`);
     addPoints(2);
   }
-
-  log("V2 接口文档完整 (系统间接口文档.md)", true);
-  addPoints(2);
 
   return waybills;
 }

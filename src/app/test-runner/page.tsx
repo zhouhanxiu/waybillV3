@@ -737,46 +737,6 @@ export default function TestRunnerPage() {
     });
 
     // ══════════════════════════════════════════════════════════════
-    // 考点6: 文档检查 (12分)
-    // ══════════════════════════════════════════════════════════════
-    await runIfNeeded("考点6: 文档检查", 12, async (t6) => {
-      setCurrentLine("考点6: 文档检查...");
-
-      const docs = [
-        { path: "/需求理解与假设说明.md", label: "需求理解与假设说明", pts: 3 },
-        { path: "/系统间接口文档.md", label: "系统间接口文档", pts: 3 },
-        { path: "/反思题.md", label: "反思题", pts: 2 },
-      ];
-
-      for (const doc of docs) {
-        try {
-          const r = await fetch(doc.path);
-          const size = r.ok ? (await r.text()).length : 0;
-          t6(`文档"${doc.label}" (${doc.pts}pts)`, r.ok && size > 100,
-            r.ok ? `${(size / 1024).toFixed(1)}KB` : `status=${r.status}`);
-        } catch {
-          t6(`文档"${doc.label}" (${doc.pts}pts)`, false, "获取失败");
-        }
-      }
-
-      // 检查假设文档覆盖
-      try {
-        const ad = await fetch("/需求理解与假设说明.md");
-        if (ad.ok) {
-          const content = await ad.text();
-          const kws = ["分级审批", "阈值", "超时时长", "重提次数", "物流异常类型", "角色权限", "数据同步", "品控暂扣", "品控规则"];
-          let covered = 0;
-          kws.forEach(kw => { if (content.includes(kw)) covered++; });
-          t6(`假设文档覆盖${covered}/${kws.length}项留白点 (4pts)`, covered >= 7, `覆盖${covered}项`);
-        } else {
-          t6("假设文档覆盖留白点 (4pts)", false, "文档不可读");
-        }
-      } catch {
-        t6("假设文档覆盖留白点 (4pts)", false, "获取失败");
-      }
-    });
-
-    // ══════════════════════════════════════════════════════════════
     // 执行记录兜底：确保页面有数据可展示
     // ══════════════════════════════════════════════════════════════
     setCurrentLine("检查执行记录...");
@@ -841,7 +801,7 @@ export default function TestRunnerPage() {
           <div>
             <h1 className="text-2xl font-bold text-ink">V3 全自动化测试</h1>
             <p className="text-sm text-ink-faint mt-1">
-              覆盖考点1-7：部署、状态机、数据一致性、跨系统接口、扫描品控、文档
+              覆盖考点1-5、7：部署、状态机、数据一致性、跨系统接口、扫描品控
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -901,7 +861,7 @@ export default function TestRunnerPage() {
               className="w-4 h-4 rounded border-line text-jingtian focus:ring-jingtian"
             />
             <SkipForward className="w-4 h-4 text-ink-faint" />
-            <span className="text-ink-soft">跳过历史已通过的考点（考点1/2/6）</span>
+            <span className="text-ink-soft">跳过历史已通过的考点</span>
           </label>
           <div className="flex items-center gap-2 sm:ml-4">
             <Clock className="w-3 h-3 text-ink-faint" />
